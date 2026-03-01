@@ -11,7 +11,10 @@ namespace LLMeta.App;
 
 public partial class App : System.Windows.Application
 {
+    private const int AndroidBridgePort = 39090;
+
     private OpenXrControllerInputService? _openXrControllerInputService;
+    private AndroidInputBridgeTcpServerService? _androidInputBridgeTcpServerService;
     private readonly KeyboardInputEmulatorService _keyboardInputEmulatorService = new();
     private DispatcherTimer? _openXrPollTimer;
     private string? _lastOpenXrStatus;
@@ -60,6 +63,15 @@ public partial class App : System.Windows.Application
             var settingsStore = new SettingsStore(logger);
             var settings = settingsStore.Load();
             var mainViewModel = new MainViewModel(settings, settingsStore, logger);
+
+            _androidInputBridgeTcpServerService = new AndroidInputBridgeTcpServerService(
+                logger,
+                AndroidBridgePort
+            );
+            _androidInputBridgeTcpServerService.Start();
+            mainViewModel.BridgeStatus =
+                _androidInputBridgeTcpServerService.StatusText + " (A-1: Android -> 10.0.2.2)";
+
             var openXrControllerInputService = new OpenXrControllerInputService();
             var initializeState = openXrControllerInputService.Initialize();
             mainViewModel.UpdateOpenXrControllerState(initializeState);
@@ -118,6 +130,17 @@ public partial class App : System.Windows.Application
                     }
 
                     mainViewModel.UpdateOpenXrControllerState(state);
+                    if (_androidInputBridgeTcpServerService is not null)
+                    {
+                        _androidInputBridgeTcpServerService.UpdateLatestState(
+                            state,
+                            mainViewModel.IsKeyboardDebugMode
+                        );
+                        mainViewModel.BridgeStatus =
+                            _androidInputBridgeTcpServerService.StatusText
+                            + " (A-1: Android -> 10.0.2.2)";
+                    }
+
                     if (_lastOpenXrStatus != state.Status)
                     {
                         _lastOpenXrStatus = state.Status;
@@ -143,6 +166,8 @@ public partial class App : System.Windows.Application
         _openXrPollTimer = null;
         _openXrControllerInputService?.Dispose();
         _openXrControllerInputService = null;
+        _androidInputBridgeTcpServerService?.Dispose();
+        _androidInputBridgeTcpServerService = null;
         base.OnExit(e);
     }
 }

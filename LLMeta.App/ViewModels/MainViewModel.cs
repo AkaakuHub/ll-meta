@@ -15,6 +15,7 @@ public sealed class MainViewModel : ViewModelBase
     private string _statusMessage = "Ready";
     private string _sampleText = string.Empty;
     private string _openXrInputStatus = "OpenXR input: not initialized";
+    private string _bridgeStatus = "Bridge: not started";
     private bool _isKeyboardDebugMode;
     private string _hmdPoseState = "HMD: -";
     private string _leftControllerState = "Left: -";
@@ -73,6 +74,12 @@ public sealed class MainViewModel : ViewModelBase
     }
 
     public ICommand SaveSettingsCommand { get; }
+
+    public string BridgeStatus
+    {
+        get => _bridgeStatus;
+        set => SetProperty(ref _bridgeStatus, value);
+    }
 
     public void UpdateOpenXrControllerState(OpenXrControllerState state)
     {

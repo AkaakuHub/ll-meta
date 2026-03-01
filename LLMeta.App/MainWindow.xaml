@@ -49,6 +49,7 @@
       <Border BorderBrush="#DDDDDD" BorderThickness="1" Padding="8">
         <StackPanel>
           <TextBlock Text="{Binding OpenXrInputStatus}" Margin="0,0,0,8" />
+          <TextBlock Text="{Binding BridgeStatus}" Margin="0,0,0,8" />
           <TextBlock Text="{Binding HmdPoseState}" TextWrapping="Wrap" Margin="0,0,0,8" />
           <TextBlock Text="{Binding LeftControllerState}" Margin="0,0,0,4" />
           <TextBlock Text="{Binding RightControllerState}" TextWrapping="Wrap" />
