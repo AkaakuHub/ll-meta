@@ -9,7 +9,7 @@ namespace LLMeta.App.Services;
 public sealed class AndroidInputBridgeTcpServerService : IDisposable
 {
     private const int HeaderSize = 8;
-    private const int BodySize = 68;
+    private const int BodySize = 72;
     private const int PacketSize = HeaderSize + BodySize;
     private const uint Magic = 0x4C4D4554; // "LMET"
     private const byte Version = 1;
@@ -186,10 +186,11 @@ public sealed class AndroidInputBridgeTcpServerService : IDisposable
         BinaryPrimitives.WriteSingleLittleEndian(body.Slice(40, 4), frame.RightGripValue);
         BinaryPrimitives.WriteSingleLittleEndian(body.Slice(44, 4), frame.YawRadians);
         BinaryPrimitives.WriteSingleLittleEndian(body.Slice(48, 4), frame.PitchRadians);
-        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(52, 4), frame.HmdPositionX);
-        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(56, 4), frame.HmdPositionY);
-        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(60, 4), frame.HmdPositionZ);
-        BinaryPrimitives.WriteUInt32LittleEndian(body.Slice(64, 4), frame.ButtonsBitMask);
+        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(52, 4), frame.RollRadians);
+        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(56, 4), frame.HmdPositionX);
+        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(60, 4), frame.HmdPositionY);
+        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(64, 4), frame.HmdPositionZ);
+        BinaryPrimitives.WriteUInt32LittleEndian(body.Slice(68, 4), frame.ButtonsBitMask);
     }
 
     private void UpdateStatus(string statusText)
@@ -209,6 +210,7 @@ public sealed class AndroidInputBridgeTcpServerService : IDisposable
         float RightGripValue,
         float YawRadians,
         float PitchRadians,
+        float RollRadians,
         float HmdPositionX,
         float HmdPositionY,
         float HmdPositionZ,
@@ -224,7 +226,7 @@ public sealed class AndroidInputBridgeTcpServerService : IDisposable
         private const uint ButtonLeftStickClick = 1 << 4;
         private const uint ButtonRightStickClick = 1 << 5;
 
-        public static BridgeFrame Empty => new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        public static BridgeFrame Empty => new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
         public static BridgeFrame FromState(OpenXrControllerState state, bool isKeyboardDebugMode)
         {
@@ -277,6 +279,7 @@ public sealed class AndroidInputBridgeTcpServerService : IDisposable
                 state.RightGripValue,
                 state.HeadPose.YawDegrees * DegToRad,
                 state.HeadPose.PitchDegrees * DegToRad,
+                state.HeadPose.RollDegrees * DegToRad,
                 state.HeadPose.PositionX,
                 state.HeadPose.PositionY,
                 state.HeadPose.PositionZ,
