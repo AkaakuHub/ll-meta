@@ -63,8 +63,34 @@ public partial class App : System.Windows.Application
             var settings = settingsStore.Load();
             var startupRegistryService = new StartupRegistryService();
             var openXrInputService = new OpenXrInputService();
-            var openXrInstanceResult = openXrInputService.CreateAndDestroyInstance();
-            logger.Info($"OpenXR instance create result: {openXrInstanceResult}");
+            var openXrProbeResult = openXrInputService.ProbeHeadMountedDisplaySession();
+            logger.Info(
+                $"OpenXR enumerate extensions result: {openXrProbeResult.EnumerateExtensionsResult}"
+            );
+            logger.Info(
+                $"OpenXR supports XR_KHR_D3D11_enable: {openXrProbeResult.SupportsKhrD3D11Enable}"
+            );
+            logger.Info(
+                $"OpenXR supports XR_KHR_D3D12_enable: {openXrProbeResult.SupportsKhrD3D12Enable}"
+            );
+            logger.Info(
+                $"OpenXR supports XR_MND_headless: {openXrProbeResult.SupportsMndHeadless}"
+            );
+            logger.Info($"OpenXR instance create result: {openXrProbeResult.InstanceCreateResult}");
+            logger.Info(
+                $"OpenXR get system result: {openXrProbeResult.GetSystemResult}, systemId: {openXrProbeResult.SystemId}"
+            );
+            logger.Info(
+                $"OpenXR get D3D11 graphics requirements result: {openXrProbeResult.GetD3D11GraphicsRequirementsResult}"
+            );
+            logger.Info(
+                $"OpenXR D3D11 create device HRESULT: 0x{openXrProbeResult.D3D11CreateDeviceHResult:X8}"
+            );
+            logger.Info($"OpenXR create session result: {openXrProbeResult.CreateSessionResult}");
+            if (!string.IsNullOrWhiteSpace(openXrProbeResult.Diagnostics))
+            {
+                logger.Info($"OpenXR diagnostics: {openXrProbeResult.Diagnostics}");
+            }
 
             var mainViewModel = new MainViewModel(
                 settings,
