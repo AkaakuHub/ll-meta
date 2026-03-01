@@ -15,6 +15,7 @@ public sealed class MainViewModel : ViewModelBase
     private string _statusMessage = "Ready";
     private string _sampleText = string.Empty;
     private string _openXrInputStatus = "OpenXR input: not initialized";
+    private bool _isKeyboardDebugMode;
     private string _hmdPoseState = "HMD: -";
     private string _leftControllerState = "Left: -";
     private string _rightControllerState = "Right: -";
@@ -45,6 +46,12 @@ public sealed class MainViewModel : ViewModelBase
     {
         get => _openXrInputStatus;
         set => SetProperty(ref _openXrInputStatus, value);
+    }
+
+    public bool IsKeyboardDebugMode
+    {
+        get => _isKeyboardDebugMode;
+        set => SetProperty(ref _isKeyboardDebugMode, value);
     }
 
     public string LeftControllerState

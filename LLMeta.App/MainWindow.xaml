@@ -34,6 +34,16 @@
 
       <TextBlock Text="Settings:" FontWeight="SemiBold" Margin="0,16,0,8" />
       <TextBlock Text="OpenXR input monitor mode" Foreground="Gray" Margin="0,0,0,4" />
+      <CheckBox
+        Content="Enable keyboard debug input"
+        IsChecked="{Binding IsKeyboardDebugMode}"
+        Margin="0,0,0,8"
+      />
+      <TextBlock
+        Foreground="Gray"
+        TextWrapping="Wrap"
+        Text="Left stick: WASD | Right stick: IJKL | Buttons: 1(X) 2(Y) 3(A) 4(B) | Trigger/Grip: Q E U O | Stick click: LeftShift RightShift | HMD yaw/pitch/roll: Arrow + PageUp/PageDown | HMD position: F/H(X) T/G(Y) R/V(Z)"
+      />
 
       <TextBlock Text="OpenXR Controller Input:" FontWeight="SemiBold" Margin="0,16,0,8" />
       <Border BorderBrush="#DDDDDD" BorderThickness="1" Padding="8">

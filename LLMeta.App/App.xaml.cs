@@ -12,6 +12,7 @@ namespace LLMeta.App;
 public partial class App : System.Windows.Application
 {
     private OpenXrControllerInputService? _openXrControllerInputService;
+    private readonly KeyboardInputEmulatorService _keyboardInputEmulatorService = new();
     private DispatcherTimer? _openXrPollTimer;
     private string? _lastOpenXrStatus;
 
@@ -67,15 +68,55 @@ public partial class App : System.Windows.Application
             if (initializeState.IsInitialized)
             {
                 _openXrControllerInputService = openXrControllerInputService;
+            }
+            else
+            {
+                openXrControllerInputService.Dispose();
+            }
+
+            if (!initializeState.IsInitialized)
+            {
+                mainViewModel.IsKeyboardDebugMode = true;
+            }
+
+            MainWindow = new MainWindow { DataContext = mainViewModel };
+            MainWindow.PreviewKeyDown += (_, args) =>
+            {
+                if (mainViewModel.IsKeyboardDebugMode)
+                {
+                    _keyboardInputEmulatorService.OnKeyDown(args.Key);
+                }
+            };
+            MainWindow.PreviewKeyUp += (_, args) =>
+            {
+                if (mainViewModel.IsKeyboardDebugMode)
+                {
+                    _keyboardInputEmulatorService.OnKeyUp(args.Key);
+                }
+            };
+            MainWindow.Show();
+
+            if (_openXrPollTimer is null)
+            {
                 _openXrPollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
                 _openXrPollTimer.Tick += (_, _) =>
                 {
-                    if (_openXrControllerInputService is null)
+                    OpenXrControllerState state;
+                    if (mainViewModel.IsKeyboardDebugMode)
                     {
-                        return;
+                        state = _keyboardInputEmulatorService.BuildState();
+                    }
+                    else if (_openXrControllerInputService is not null)
+                    {
+                        state = _openXrControllerInputService.Poll();
+                    }
+                    else
+                    {
+                        state = _keyboardInputEmulatorService.BuildUnavailableState(
+                            "OpenXR is not initialized. Enable keyboard debug input."
+                        );
                     }
 
-                    var state = _openXrControllerInputService.Poll();
                     mainViewModel.UpdateOpenXrControllerState(state);
                     if (_lastOpenXrStatus != state.Status)
                     {
@@ -85,13 +126,6 @@ public partial class App : System.Windows.Application
                 };
                 _openXrPollTimer.Start();
             }
-            else
-            {
-                openXrControllerInputService.Dispose();
-            }
-
-            MainWindow = new MainWindow { DataContext = mainViewModel };
-            MainWindow.Show();
 
             logger.Info("Startup completed.");
         }
