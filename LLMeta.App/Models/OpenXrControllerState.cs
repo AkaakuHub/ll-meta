@@ -3,6 +3,7 @@ namespace LLMeta.App.Models;
 public readonly record struct OpenXrControllerState(
     bool IsInitialized,
     string Status,
+    OpenXrHeadPoseState HeadPose,
     float LeftStickX,
     float LeftStickY,
     float RightStickX,

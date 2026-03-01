@@ -25,6 +25,9 @@ public sealed unsafe partial class OpenXrControllerInputService : IDisposable
     private XrAction _rightGripAction;
     private XrAction _leftStickClickAction;
     private XrAction _rightStickClickAction;
+    private Space _localSpace;
+    private Space _viewSpace;
+    private long _predictedDisplayTime;
     private ID3D11Device* _d3d11Device;
     private ID3D11DeviceContext* _d3d11DeviceContext;
     private SessionState _sessionState = SessionState.Unknown;
@@ -122,6 +125,14 @@ public sealed unsafe partial class OpenXrControllerInputService : IDisposable
                 return CreateState($"InitializeActions failed: {initializeActionsResult}");
             }
 
+            var initializeHeadTrackingResult = InitializeHeadTrackingSpaces();
+            if (initializeHeadTrackingResult != Result.Success)
+            {
+                return CreateState(
+                    $"InitializeHeadTrackingSpaces failed: {initializeHeadTrackingResult}"
+                );
+            }
+
             _isInitialized = true;
             if (_bindingSupportSummary.Length > 0)
             {
@@ -197,10 +208,12 @@ public sealed unsafe partial class OpenXrControllerInputService : IDisposable
         var rightGrip = GetFloatActionState(_rightGripAction);
         var leftStickClick = GetBooleanActionState(_leftStickClickAction);
         var rightStickClick = GetBooleanActionState(_rightStickClickAction);
+        var headPose = LocateHeadPose();
 
         return new OpenXrControllerState(
             true,
             $"Session state: {_sessionState}",
+            headPose,
             leftStick.X,
             leftStick.Y,
             rightStick.X,
@@ -303,6 +316,18 @@ public sealed unsafe partial class OpenXrControllerInputService : IDisposable
             _actionSet = default;
         }
 
+        if (_viewSpace.Handle != 0)
+        {
+            _xr.DestroySpace(_viewSpace);
+            _viewSpace = default;
+        }
+
+        if (_localSpace.Handle != 0)
+        {
+            _xr.DestroySpace(_localSpace);
+            _localSpace = default;
+        }
+
         if (_session.Handle != 0)
         {
             if (_isSessionRunning)
@@ -342,6 +367,26 @@ public sealed unsafe partial class OpenXrControllerInputService : IDisposable
         return new OpenXrControllerState(
             _isInitialized,
             status,
+            new OpenXrHeadPoseState(
+                false,
+                false,
+                false,
+                false,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                false,
+                false,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ),
             0,
             0,
             0,

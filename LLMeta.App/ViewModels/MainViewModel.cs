@@ -15,6 +15,7 @@ public sealed class MainViewModel : ViewModelBase
     private string _statusMessage = "Ready";
     private string _sampleText = string.Empty;
     private string _openXrInputStatus = "OpenXR input: not initialized";
+    private string _hmdPoseState = "HMD: -";
     private string _leftControllerState = "Left: -";
     private string _rightControllerState = "Right: -";
 
@@ -52,6 +53,12 @@ public sealed class MainViewModel : ViewModelBase
         set => SetProperty(ref _leftControllerState, value);
     }
 
+    public string HmdPoseState
+    {
+        get => _hmdPoseState;
+        set => SetProperty(ref _hmdPoseState, value);
+    }
+
     public string RightControllerState
     {
         get => _rightControllerState;
@@ -63,6 +70,11 @@ public sealed class MainViewModel : ViewModelBase
     public void UpdateOpenXrControllerState(OpenXrControllerState state)
     {
         OpenXrInputStatus = $"OpenXR: {state.Status}";
+        HmdPoseState =
+            $"HMD Pos({state.HeadPose.PositionX:0.000}, {state.HeadPose.PositionY:0.000}, {state.HeadPose.PositionZ:0.000}) "
+            + $"YPR({state.HeadPose.YawDegrees:0.0}, {state.HeadPose.PitchDegrees:0.0}, {state.HeadPose.RollDegrees:0.0}) "
+            + $"| PosValid:{ToOnOff(state.HeadPose.IsPositionValid)} PosTracked:{ToOnOff(state.HeadPose.IsPositionTracked)} "
+            + $"OriValid:{ToOnOff(state.HeadPose.IsOrientationValid)} OriTracked:{ToOnOff(state.HeadPose.IsOrientationTracked)}";
         LeftControllerState =
             $"Left Stick ({state.LeftStickX:0.00}, {state.LeftStickY:0.00}) Click:{ToOnOff(state.LeftStickClickPressed)} | X:{ToOnOff(state.LeftXPressed)} Y:{ToOnOff(state.LeftYPressed)} | Trigger:{state.LeftTriggerValue:0.00} | Grip:{state.LeftGripValue:0.00}";
         RightControllerState =

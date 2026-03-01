@@ -1,3 +1,4 @@
+using LLMeta.App.Models;
 using Silk.NET.OpenXR;
 using XrAction = Silk.NET.OpenXR.Action;
 
@@ -77,6 +78,7 @@ public sealed unsafe partial class OpenXrControllerInputService
         {
             return waitResult;
         }
+        _predictedDisplayTime = frameState.PredictedDisplayTime;
 
         var beginInfo = new FrameBeginInfo { Type = StructureType.FrameBeginInfo };
         var beginResult = _xr.BeginFrame(_session, ref beginInfo);
@@ -94,6 +96,107 @@ public sealed unsafe partial class OpenXrControllerInputService
             Layers = (CompositionLayerBaseHeader**)0,
         };
         return _xr.EndFrame(_session, ref endInfo);
+    }
+
+    private Result InitializeHeadTrackingSpaces()
+    {
+        if (_xr is null)
+        {
+            return Result.ErrorHandleInvalid;
+        }
+
+        var identityPose = new Posef
+        {
+            Orientation = new Quaternionf
+            {
+                X = 0,
+                Y = 0,
+                Z = 0,
+                W = 1,
+            },
+            Position = new Vector3f
+            {
+                X = 0,
+                Y = 0,
+                Z = 0,
+            },
+        };
+
+        var localCreateInfo = new ReferenceSpaceCreateInfo
+        {
+            Type = StructureType.ReferenceSpaceCreateInfo,
+            ReferenceSpaceType = ReferenceSpaceType.Local,
+            PoseInReferenceSpace = identityPose,
+        };
+        var localCreateResult = _xr.CreateReferenceSpace(
+            _session,
+            ref localCreateInfo,
+            ref _localSpace
+        );
+        if (localCreateResult != Result.Success)
+        {
+            return localCreateResult;
+        }
+
+        var viewCreateInfo = new ReferenceSpaceCreateInfo
+        {
+            Type = StructureType.ReferenceSpaceCreateInfo,
+            ReferenceSpaceType = ReferenceSpaceType.View,
+            PoseInReferenceSpace = identityPose,
+        };
+        return _xr.CreateReferenceSpace(_session, ref viewCreateInfo, ref _viewSpace);
+    }
+
+    private OpenXrHeadPoseState LocateHeadPose()
+    {
+        if (
+            _xr is null
+            || _viewSpace.Handle == 0
+            || _localSpace.Handle == 0
+            || _predictedDisplayTime == 0
+        )
+        {
+            return CreateEmptyHeadPose();
+        }
+
+        var velocity = new SpaceVelocity { Type = StructureType.SpaceVelocity };
+        var location = new SpaceLocation { Type = StructureType.SpaceLocation, Next = &velocity };
+        var locateResult = _xr.LocateSpace(
+            _viewSpace,
+            _localSpace,
+            _predictedDisplayTime,
+            ref location
+        );
+        if (locateResult != Result.Success)
+        {
+            return CreateEmptyHeadPose();
+        }
+
+        var locationFlags = location.LocationFlags;
+        var velocityFlags = velocity.VelocityFlags;
+        var orientation = location.Pose.Orientation;
+        var euler = ToEulerDegrees(orientation);
+
+        return new OpenXrHeadPoseState(
+            (locationFlags & SpaceLocationFlags.PositionValidBit) != 0,
+            (locationFlags & SpaceLocationFlags.PositionTrackedBit) != 0,
+            (locationFlags & SpaceLocationFlags.OrientationValidBit) != 0,
+            (locationFlags & SpaceLocationFlags.OrientationTrackedBit) != 0,
+            location.Pose.Position.X,
+            location.Pose.Position.Y,
+            location.Pose.Position.Z,
+            euler.Yaw,
+            euler.Pitch,
+            euler.Roll,
+            (velocityFlags & SpaceVelocityFlags.LinearValidBit) != 0,
+            (velocityFlags & SpaceVelocityFlags.AngularValidBit) != 0,
+            velocity.LinearVelocity.X,
+            velocity.LinearVelocity.Y,
+            velocity.LinearVelocity.Z,
+            velocity.AngularVelocity.X,
+            velocity.AngularVelocity.Y,
+            velocity.AngularVelocity.Z
+        );
     }
 
     private static bool CanSyncActionsInCurrentState(SessionState state)
@@ -168,5 +271,47 @@ public sealed unsafe partial class OpenXrControllerInputService
         }
 
         return state.CurrentState;
+    }
+
+    private static OpenXrHeadPoseState CreateEmptyHeadPose()
+    {
+        return new OpenXrHeadPoseState(
+            false,
+            false,
+            false,
+            false,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            false,
+            false,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+        );
+    }
+
+    private static (float Yaw, float Pitch, float Roll) ToEulerDegrees(Quaternionf q)
+    {
+        var sinrCosp = 2.0f * (q.W * q.X + q.Y * q.Z);
+        var cosrCosp = 1.0f - 2.0f * (q.X * q.X + q.Y * q.Y);
+        var roll = MathF.Atan2(sinrCosp, cosrCosp);
+
+        var sinp = 2.0f * (q.W * q.Y - q.Z * q.X);
+        var pitch =
+            MathF.Abs(sinp) >= 1.0f ? MathF.CopySign(MathF.PI / 2.0f, sinp) : MathF.Asin(sinp);
+
+        var sinyCosp = 2.0f * (q.W * q.Z + q.X * q.Y);
+        var cosyCosp = 1.0f - 2.0f * (q.Y * q.Y + q.Z * q.Z);
+        var yaw = MathF.Atan2(sinyCosp, cosyCosp);
+
+        const float rad2Deg = 57.2957795f;
+        return (yaw * rad2Deg, pitch * rad2Deg, roll * rad2Deg);
     }
 }
