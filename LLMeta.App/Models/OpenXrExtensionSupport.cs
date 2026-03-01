@@ -4,7 +4,5 @@ namespace LLMeta.App.Models;
 
 public readonly record struct OpenXrExtensionSupport(
     Result EnumerateResult,
-    bool SupportsKhrD3D11Enable,
-    bool SupportsKhrD3D12Enable,
-    bool SupportsMndHeadless
+    bool SupportsKhrD3D11Enable
 );

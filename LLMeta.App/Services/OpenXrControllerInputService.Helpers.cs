@@ -25,7 +25,7 @@ public sealed unsafe partial class OpenXrControllerInputService
         );
         if (enumerateResult != Result.Success)
         {
-            return new OpenXrExtensionSupport(enumerateResult, false, false, false);
+            return new OpenXrExtensionSupport(enumerateResult, false);
         }
 
         var properties = new ExtensionProperties[extensionCount];
@@ -46,12 +46,10 @@ public sealed unsafe partial class OpenXrControllerInputService
 
         if (enumerateResult != Result.Success)
         {
-            return new OpenXrExtensionSupport(enumerateResult, false, false, false);
+            return new OpenXrExtensionSupport(enumerateResult, false);
         }
 
         var supportsKhrD3D11Enable = false;
-        var supportsKhrD3D12Enable = false;
-        var supportsMndHeadless = false;
         for (var i = 0; i < properties.Length; i++)
         {
             fixed (byte* extensionNamePointer = properties[i].ExtensionName)
@@ -64,23 +62,10 @@ public sealed unsafe partial class OpenXrControllerInputService
                 {
                     supportsKhrD3D11Enable = true;
                 }
-                else if (extensionName == "XR_KHR_D3D12_enable")
-                {
-                    supportsKhrD3D12Enable = true;
-                }
-                else if (extensionName == "XR_MND_headless")
-                {
-                    supportsMndHeadless = true;
-                }
             }
         }
 
-        return new OpenXrExtensionSupport(
-            enumerateResult,
-            supportsKhrD3D11Enable,
-            supportsKhrD3D12Enable,
-            supportsMndHeadless
-        );
+        return new OpenXrExtensionSupport(enumerateResult, supportsKhrD3D11Enable);
     }
 
     private static ApplicationInfo CreateApplicationInfo()
