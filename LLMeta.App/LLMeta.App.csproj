@@ -12,6 +12,7 @@
 
     <ItemGroup>
         <PackageReference Include="Roslynator.Analyzers" Version="4.15.0" PrivateAssets="all" />
+        <PackageReference Include="Silk.NET.OpenXR" Version="2.23.0" />
         <PackageReference Include="Velopack" Version="0.0.1298" />
     </ItemGroup>
 
