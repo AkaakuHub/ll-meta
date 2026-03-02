@@ -7,5 +7,6 @@ public readonly record struct VideoFramePacket(
     byte Flags,
     bool IsKeyFrame,
     bool HasCodecConfig,
+    string CodecName,
     byte[] Payload
 );

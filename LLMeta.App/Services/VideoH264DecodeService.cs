@@ -8,6 +8,18 @@ namespace LLMeta.App.Services;
 
 public sealed class VideoH264DecodeService : IDisposable
 {
+    private const int MfTransformTypeNotSet = unchecked((int)0xC00D6D60);
+    private const int DefaultInputWidth = 1920;
+    private const int DefaultInputHeight = 1080;
+    private const int DefaultInputFrameRateNumerator = 60;
+    private const int DefaultInputFrameRateDenominator = 1;
+
+    private enum VideoCodecKind
+    {
+        Unknown = 0,
+        Vp8 = 1,
+    }
+
     private enum DecoderOutputPixelFormat
     {
         Unknown = 0,
@@ -22,6 +34,8 @@ public sealed class VideoH264DecodeService : IDisposable
     private bool _outputTypeSet;
     private int _outputWidth;
     private int _outputHeight;
+    private VideoCodecKind _activeCodecKind = VideoCodecKind.Unknown;
+    private string _activeCodecName = "unknown";
     private DecoderOutputPixelFormat _outputPixelFormat = DecoderOutputPixelFormat.Unknown;
     private long _sampleTime100Ns;
     private DecodedVideoFrame? _latestFrame;
@@ -53,10 +67,10 @@ public sealed class VideoH264DecodeService : IDisposable
     {
         try
         {
-            EnsureStarted();
+            EnsureStarted(packet.CodecName);
             if (_decoder is null)
             {
-                return "decoder unavailable";
+                return "decoder unavailable (" + packet.CodecName + ")";
             }
 
             using var sample = MediaFactory.MFCreateSample();
@@ -97,7 +111,7 @@ public sealed class VideoH264DecodeService : IDisposable
         {
             _logger.Error("Video decode failed.", ex);
             ResetDecoderAfterFailure();
-            return "decode failed: " + ex.Message;
+            return "decode failed (" + packet.CodecName + "): " + ex.Message;
         }
     }
 
@@ -112,11 +126,25 @@ public sealed class VideoH264DecodeService : IDisposable
         }
     }
 
-    private void EnsureStarted()
+    private void EnsureStarted(string codecName)
     {
-        if (_decoder is not null)
+        var targetCodecKind = ParseCodecKind(codecName);
+        if (targetCodecKind == VideoCodecKind.Unknown)
+        {
+            throw new InvalidOperationException("Unsupported video codec: " + codecName);
+        }
+
+        if (_decoder is not null && _activeCodecKind == targetCodecKind)
         {
             return;
+        }
+
+        if (_decoder is not null && _activeCodecKind != targetCodecKind)
+        {
+            _logger.Info(
+                $"Video decoder reinitialize: {_activeCodecName} -> {NormalizeCodecName(codecName)}"
+            );
+            ResetDecoderAfterFailure();
         }
 
         if (!_isStarted)
@@ -126,23 +154,144 @@ public sealed class VideoH264DecodeService : IDisposable
             _logger.Info("Media Foundation started: full startup.");
         }
 
-        var decoderTransform = CreateDecoderTransform();
+        var decoderTransform = CreateDecoderTransform(targetCodecKind, out var inputSubtype);
         if (decoderTransform is null)
         {
             throw new InvalidOperationException(
-                "No H.264 decoder MFT was found (hardware and software)."
+                "No decoder MFT was found for codec " + NormalizeCodecName(codecName) + "."
             );
         }
         _decoder = decoderTransform;
 
-        using var decoderInputType = MediaFactory.MFCreateMediaType();
-        decoderInputType.Set(MediaTypeAttributeKeys.MajorType, MediaTypeGuids.Video);
-        decoderInputType.Set(MediaTypeAttributeKeys.Subtype, VideoFormatGuids.H264);
-        _decoder.SetInputType(0, decoderInputType, (int)SetTypeFlags.None);
+        try
+        {
+            ApplyDecoderInputType(inputSubtype);
+        }
+        catch (SharpGenException ex) when (ex.HResult == MfTransformTypeNotSet)
+        {
+            _logger.Info(
+                "Video decoder input type requires output type first. Trying output bootstrap."
+            );
+            if (!TrySetOutputType())
+            {
+                throw;
+            }
+
+            ApplyDecoderInputType(inputSubtype);
+        }
+
+        if (!TrySetOutputType())
+        {
+            throw new InvalidOperationException(
+                "Decoder output type could not be applied for codec "
+                    + NormalizeCodecName(codecName)
+                    + "."
+            );
+        }
+
+        _activeCodecKind = targetCodecKind;
+        _activeCodecName = NormalizeCodecName(codecName);
 
         _decoder.ProcessMessage(TMessageType.MessageNotifyBeginStreaming, UIntPtr.Zero);
         _decoder.ProcessMessage(TMessageType.MessageNotifyStartOfStream, UIntPtr.Zero);
-        _logger.Info("Video decoder started: H.264 MFT initialized.");
+        _logger.Info(
+            $"Video decoder started: codec={_activeCodecName} inputSubtype={inputSubtype}"
+        );
+    }
+
+    private void ApplyDecoderInputType(Guid inputSubtype)
+    {
+        if (_decoder is null)
+        {
+            throw new InvalidOperationException("Decoder is not initialized.");
+        }
+
+        Exception? lastError = null;
+        for (var index = 0; ; index++)
+        {
+            IMFMediaType? availableType = null;
+            try
+            {
+                availableType = _decoder.GetInputAvailableType(0, index);
+            }
+            catch
+            {
+                break;
+            }
+
+            using (availableType)
+            {
+                Guid majorType;
+                Guid subtype;
+                try
+                {
+                    majorType = availableType.GetGUID(MediaTypeAttributeKeys.MajorType);
+                    subtype = availableType.GetGUID(MediaTypeAttributeKeys.Subtype);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (majorType != MediaTypeGuids.Video || subtype != inputSubtype)
+                {
+                    continue;
+                }
+
+                ApplyCommonInputVideoAttributes(availableType);
+                try
+                {
+                    _decoder.SetInputType(0, availableType, (int)SetTypeFlags.None);
+                    _logger.Info(
+                        "Video decoder input format ready: "
+                            + $"subtype={DescribeInputSubtype(new RegisterTypeInfo { GuidMajorType = majorType, GuidSubtype = subtype })}"
+                            + $" width={DefaultInputWidth} height={DefaultInputHeight}"
+                            + $" fps={DefaultInputFrameRateNumerator}/{DefaultInputFrameRateDenominator}"
+                    );
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    lastError = ex;
+                    _logger.Info(
+                        "Video decoder input type rejected: "
+                            + $"index={index} subtype={DescribeInputSubtype(new RegisterTypeInfo { GuidMajorType = majorType, GuidSubtype = subtype })}"
+                            + $" error={ex.Message}"
+                    );
+                }
+            }
+        }
+
+        if (lastError is not null)
+        {
+            throw new InvalidOperationException(
+                "Decoder input type could not be applied for subtype " + inputSubtype + ".",
+                lastError
+            );
+        }
+
+        throw new InvalidOperationException(
+            "Decoder input type was not found for subtype " + inputSubtype + "."
+        );
+    }
+
+    private static void ApplyCommonInputVideoAttributes(IMFMediaType mediaType)
+    {
+        mediaType.Set(
+            MediaTypeAttributeKeys.FrameSize,
+            PackRatio(DefaultInputWidth, DefaultInputHeight)
+        );
+        mediaType.Set(
+            MediaTypeAttributeKeys.FrameRate,
+            PackRatio(DefaultInputFrameRateNumerator, DefaultInputFrameRateDenominator)
+        );
+        mediaType.Set(MediaTypeAttributeKeys.PixelAspectRatio, PackRatio(1, 1));
+        mediaType.Set(MediaTypeAttributeKeys.InterlaceMode, 2);
+    }
+
+    private static ulong PackRatio(int numerator, int denominator)
+    {
+        return ((ulong)(uint)numerator << 32) | (uint)denominator;
     }
 
     private bool DrainOutputs(VideoFramePacket packet, out bool producedFrame)
@@ -326,19 +475,13 @@ public sealed class VideoH264DecodeService : IDisposable
         return _outputTypeSet;
     }
 
-    private IMFTransform? CreateDecoderTransform()
+    private IMFTransform? CreateDecoderTransform(
+        VideoCodecKind codecKind,
+        out Guid selectedInputSubtype
+    )
     {
-        var h264InputType = new RegisterTypeInfo
-        {
-            GuidMajorType = MediaTypeGuids.Video,
-            GuidSubtype = VideoFormatGuids.H264,
-        };
-        var h264EsInputType = new RegisterTypeInfo
-        {
-            GuidMajorType = MediaTypeGuids.Video,
-            GuidSubtype = VideoFormatGuids.H264Es,
-        };
-        RegisterTypeInfo?[] inputCandidates = [h264InputType, h264EsInputType];
+        var inputSubtypeCandidates = GetInputSubtypeCandidates(codecKind);
+        selectedInputSubtype = Guid.Empty;
         RegisterTypeInfo?[] outputCandidates =
         [
             new RegisterTypeInfo { GuidMajorType = MediaTypeGuids.Video },
@@ -348,8 +491,13 @@ public sealed class VideoH264DecodeService : IDisposable
         var hardwarePreferredFlags = (uint)(
             EnumFlag.EnumFlagHardware | EnumFlag.EnumFlagSortandfilter
         );
-        foreach (var inputCandidate in inputCandidates)
+        foreach (var inputSubtype in inputSubtypeCandidates)
         {
+            var inputCandidate = new RegisterTypeInfo
+            {
+                GuidMajorType = MediaTypeGuids.Video,
+                GuidSubtype = inputSubtype,
+            };
             foreach (var outputCandidate in outputCandidates)
             {
                 var decoder = EnumerateAndActivateDecoder(
@@ -364,14 +512,20 @@ public sealed class VideoH264DecodeService : IDisposable
                             + $" inputSubtype={DescribeInputSubtype(inputCandidate)}"
                             + $" outputFilter={DescribeOutputFilter(outputCandidate)}"
                     );
+                    selectedInputSubtype = inputSubtype;
                     return decoder;
                 }
             }
         }
 
         var broadFlags = (uint)EnumFlag.EnumFlagAll;
-        foreach (var inputCandidate in inputCandidates)
+        foreach (var inputSubtype in inputSubtypeCandidates)
         {
+            var inputCandidate = new RegisterTypeInfo
+            {
+                GuidMajorType = MediaTypeGuids.Video,
+                GuidSubtype = inputSubtype,
+            };
             foreach (var outputCandidate in outputCandidates)
             {
                 var decoder = EnumerateAndActivateDecoder(
@@ -386,12 +540,49 @@ public sealed class VideoH264DecodeService : IDisposable
                             + $" inputSubtype={DescribeInputSubtype(inputCandidate)}"
                             + $" outputFilter={DescribeOutputFilter(outputCandidate)}"
                     );
+                    selectedInputSubtype = inputSubtype;
                     return decoder;
                 }
             }
         }
 
         return null;
+    }
+
+    private static Guid[] GetInputSubtypeCandidates(VideoCodecKind codecKind)
+    {
+        return codecKind switch
+        {
+            VideoCodecKind.Vp8 => [new Guid("30385056-0000-0010-8000-00AA00389B71")],
+            _ => [],
+        };
+    }
+
+    private static VideoCodecKind ParseCodecKind(string codecName)
+    {
+        if (string.IsNullOrWhiteSpace(codecName))
+        {
+            return VideoCodecKind.Unknown;
+        }
+
+        var normalized = NormalizeCodecName(codecName);
+        return normalized switch
+        {
+            "VP8" => VideoCodecKind.Vp8,
+            _ => VideoCodecKind.Unknown,
+        };
+    }
+
+    private static string NormalizeCodecName(string codecName)
+    {
+        return codecName.Trim().ToUpperInvariant() switch
+        {
+            "H264" => "H264",
+            "VP8" => "VP8",
+            "VP9" => "VP9",
+            "AV1" => "AV1",
+            var unknown => unknown,
+        };
     }
 
     private static IMFTransform? EnumerateAndActivateDecoder(
@@ -406,13 +597,79 @@ public sealed class VideoH264DecodeService : IDisposable
             inputType,
             outputType
         );
-        var activate = activates.FirstOrDefault();
-        if (activate is null)
+        foreach (var activate in activates)
         {
-            return null;
+            IMFTransform? decoder = null;
+            try
+            {
+                decoder = activate.ActivateObject<IMFTransform>();
+                if (decoder is null)
+                {
+                    continue;
+                }
+
+                var subtype = inputType?.GuidSubtype ?? Guid.Empty;
+                if (subtype == Guid.Empty || !CanApplyInputType(decoder, subtype))
+                {
+                    decoder.Dispose();
+                    continue;
+                }
+
+                return decoder;
+            }
+            catch
+            {
+                decoder?.Dispose();
+            }
         }
 
-        return activate.ActivateObject<IMFTransform>();
+        return null;
+    }
+
+    private static bool CanApplyInputType(IMFTransform decoder, Guid inputSubtype)
+    {
+        for (var index = 0; ; index++)
+        {
+            IMFMediaType? availableType = null;
+            try
+            {
+                availableType = decoder.GetInputAvailableType(0, index);
+            }
+            catch
+            {
+                break;
+            }
+
+            using (availableType)
+            {
+                Guid majorType;
+                Guid subtype;
+                try
+                {
+                    majorType = availableType.GetGUID(MediaTypeAttributeKeys.MajorType);
+                    subtype = availableType.GetGUID(MediaTypeAttributeKeys.Subtype);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (majorType != MediaTypeGuids.Video || subtype != inputSubtype)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    ApplyCommonInputVideoAttributes(availableType);
+                    decoder.SetInputType(0, availableType, 1);
+                    return true;
+                }
+                catch { }
+            }
+        }
+
+        return false;
     }
 
     private static string DescribeInputSubtype(RegisterTypeInfo? inputType)
@@ -422,17 +679,11 @@ public sealed class VideoH264DecodeService : IDisposable
             return "null";
         }
 
-        if (inputType.Value.GuidSubtype == VideoFormatGuids.H264Es)
-        {
-            return "H264Es";
-        }
+        var subtype = inputType.Value.GuidSubtype;
+        if (subtype == new Guid("30385056-0000-0010-8000-00AA00389B71"))
+            return "VP8";
 
-        if (inputType.Value.GuidSubtype == VideoFormatGuids.H264)
-        {
-            return "H264";
-        }
-
-        return inputType.Value.GuidSubtype.ToString();
+        return subtype.ToString();
     }
 
     private static string DescribeOutputFilter(RegisterTypeInfo? outputType)
@@ -489,6 +740,8 @@ public sealed class VideoH264DecodeService : IDisposable
         _outputTypeSet = false;
         _outputWidth = 0;
         _outputHeight = 0;
+        _activeCodecKind = VideoCodecKind.Unknown;
+        _activeCodecName = "unknown";
         _outputPixelFormat = DecoderOutputPixelFormat.Unknown;
         _sampleTime100Ns = 0;
         _loggedFirstDecodedFrame = false;

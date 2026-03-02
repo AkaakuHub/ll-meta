@@ -236,6 +236,7 @@ public sealed class VideoTcpFrameReceiverService : IDisposable
                 header.Flags,
                 isKeyFrame,
                 hasCodecConfig,
+                "H264",
                 payload
             );
             if (_frameQueue.Count >= MaxFrameQueueLength)
