@@ -46,6 +46,7 @@ public partial class App : System.Windows.Application
     private long _lastDecodeElapsedMs;
     private uint _videoConsecutiveNoFrameDecodes;
     private DateTimeOffset _lastVideoDecodedAt = DateTimeOffset.MinValue;
+    private bool _isWaitingForVideoKeyFrame = true;
 
     public App()
     {
@@ -370,7 +371,7 @@ public partial class App : System.Windows.Application
                 if (
                     activeWebRtcPeerConnectionService is null
                     || activeVideoDecodeService is null
-                    || !activeWebRtcPeerConnectionService.TryDequeueLatestVideoFrame(
+                    || !activeWebRtcPeerConnectionService.TryDequeueVideoFrame(
                         out var encodedPacket
                     )
                 )
@@ -400,12 +401,45 @@ public partial class App : System.Windows.Application
                         _lastVideoDecodeStatus = "none";
                         _videoConsecutiveNoFrameDecodes = 0;
                         _lastVideoDecodedAt = DateTimeOffset.MinValue;
+                        _isWaitingForVideoKeyFrame = true;
                     }
                     activeWebRtcPeerConnectionService.RequestVideoKeyFrame();
                     logger.Info(
                         "Video pipeline new connection: "
                             + $"conn={_videoConnectionId} seq={encodedPacket.Sequence} payload={encodedPacket.Payload.Length}"
                     );
+                }
+
+                var now = DateTimeOffset.UtcNow;
+                bool shouldDecodeCurrentPacket;
+                lock (_runtimeStateLock)
+                {
+                    shouldDecodeCurrentPacket =
+                        !_isWaitingForVideoKeyFrame || encodedPacket.IsKeyFrame;
+                    if (_isWaitingForVideoKeyFrame && encodedPacket.IsKeyFrame)
+                    {
+                        _isWaitingForVideoKeyFrame = false;
+                        logger.Info("Video pipeline sync: keyframe received, decode resumed.");
+                    }
+                }
+
+                if (!shouldDecodeCurrentPacket)
+                {
+                    lock (_runtimeStateLock)
+                    {
+                        if (
+                            _lastVideoKeyFrameRequestAt == DateTimeOffset.MinValue
+                            || (now - _lastVideoKeyFrameRequestAt).TotalMilliseconds >= 1000
+                        )
+                        {
+                            _lastVideoKeyFrameRequestAt = now;
+                            activeWebRtcPeerConnectionService.RequestVideoKeyFrame();
+                        }
+                        _lastVideoDecodeStatus = "waiting keyframe";
+                    }
+                    MaybeLogVideoPipelineStats(logger);
+                    await Task.Delay(1, token);
+                    continue;
                 }
 
                 lock (_runtimeStateLock)
@@ -415,7 +449,6 @@ public partial class App : System.Windows.Application
                 var decodeStopwatch = Stopwatch.StartNew();
                 var decodeStatus = activeVideoDecodeService.Decode(encodedPacket);
                 decodeStopwatch.Stop();
-                var now = DateTimeOffset.UtcNow;
                 lock (_runtimeStateLock)
                 {
                     _lastVideoDecodeStatus = decodeStatus;
@@ -463,12 +496,17 @@ public partial class App : System.Windows.Application
                             _lastVideoKeyFrameRequestAt = now;
                             activeWebRtcPeerConnectionService.RequestVideoKeyFrame();
                             _videoConsecutiveNoFrameDecodes = 0;
+                            _isWaitingForVideoKeyFrame = true;
                         }
                     }
                     var statsSnapshot = activeWebRtcPeerConnectionService.GetVideoStatsSnapshot();
+                    var syncStatus = _isWaitingForVideoKeyFrame
+                        ? "sync=waiting-keyframe"
+                        : "sync=ok";
                     _latestVideoStatus =
                         ConnectedVideoStatusPrefix
                         + _lastVideoDecodeStatus
+                        + $" | {syncStatus}"
                         + $" | rxFps={statsSnapshot.ReceivedFps:F1}"
                         + $" | rxKbps={statsSnapshot.ReceivedBitrateKbps:F0}"
                         + $" | q={statsSnapshot.QueueDepth}"
@@ -560,6 +598,7 @@ public partial class App : System.Windows.Application
             _lastDecodeElapsedMs = 0;
             _videoConsecutiveNoFrameDecodes = 0;
             _lastVideoDecodedAt = DateTimeOffset.MinValue;
+            _isWaitingForVideoKeyFrame = true;
             _latestVideoStatus = WaitingVideoStatus;
         }
     }

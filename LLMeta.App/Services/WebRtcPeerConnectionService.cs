@@ -9,7 +9,7 @@ namespace LLMeta.App.Services;
 
 public sealed class WebRtcPeerConnectionService : IDisposable
 {
-    private const int MaxVideoQueueLength = 8;
+    private const int MaxVideoQueueLength = 24;
     private static readonly Regex CandidateIpRegex = new(
         @"^(candidate:\S+\s+\d+\s+(?:udp|tcp)\s+\d+\s+)(\S+)(\s+\d+\s+typ\s+\S+.*)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant
@@ -35,6 +35,7 @@ public sealed class WebRtcPeerConnectionService : IDisposable
     private double _receiveFps;
     private double _receiveBitrateKbps;
     private uint _pliRequests;
+    private bool _dropFramesUntilKeyFrame;
 
     public WebRtcPeerConnectionService(AppLogger logger)
     {
@@ -78,39 +79,6 @@ public sealed class WebRtcPeerConnectionService : IDisposable
             }
             _videoStats = _videoStats with
             {
-                LastLatencyMs = latencyMs,
-                QueueDepth = (uint)_videoFrameQueue.Count,
-            };
-            return true;
-        }
-    }
-
-    public bool TryDequeueLatestVideoFrame(out VideoFramePacket frame)
-    {
-        lock (_stateLock)
-        {
-            if (_videoFrameQueue.Count == 0)
-            {
-                frame = default;
-                return false;
-            }
-
-            frame = _videoFrameQueue.Dequeue();
-            var dropped = _videoStats.DroppedFrames;
-            while (_videoFrameQueue.Count > 0)
-            {
-                frame = _videoFrameQueue.Dequeue();
-                dropped += 1;
-            }
-            var nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var latencyMs = nowUnixMs - (long)frame.TimestampUnixMs;
-            if (latencyMs < 0)
-            {
-                latencyMs = 0;
-            }
-            _videoStats = _videoStats with
-            {
-                DroppedFrames = dropped,
                 LastLatencyMs = latencyMs,
                 QueueDepth = (uint)_videoFrameQueue.Count,
             };
@@ -166,6 +134,7 @@ public sealed class WebRtcPeerConnectionService : IDisposable
             _receiveFps = 0;
             _receiveBitrateKbps = 0;
             _pliRequests = 0;
+            _dropFramesUntilKeyFrame = false;
         }
         ClosePeerConnection();
     }
@@ -346,6 +315,7 @@ public sealed class WebRtcPeerConnectionService : IDisposable
             _receiveFps = 0;
             _receiveBitrateKbps = 0;
             _pliRequests = 0;
+            _dropFramesUntilKeyFrame = false;
             _videoStats = new VideoStreamStats(
                 IsConnected: false,
                 LastSequence: 0,
@@ -475,17 +445,43 @@ public sealed class WebRtcPeerConnectionService : IDisposable
 
     private void HandleVideoFrame(byte[] payload, string codecName)
     {
+        var shouldRequestKeyFrame = false;
         lock (_stateLock)
         {
             var sequence = _lastVideoSequence + 1;
             _lastVideoSequence = sequence;
             _currentVideoCodecName = codecName;
+            var isKeyFrame = IsKeyFrame(payload, _currentVideoCodecName);
+
+            if (_dropFramesUntilKeyFrame && !isKeyFrame)
+            {
+                _videoStats = _videoStats with
+                {
+                    LastSequence = sequence,
+                    LastTimestampUnixMs = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    LastPayloadSize = payload.Length,
+                    RawRtpPackets = _rawVideoRtpPackets,
+                    ReceivedFps = _receiveFps,
+                    ReceivedBitrateKbps = _receiveBitrateKbps,
+                    QueueDepth = (uint)_videoFrameQueue.Count,
+                    PliRequests = _pliRequests,
+                };
+                return;
+            }
+
+            if (_dropFramesUntilKeyFrame && isKeyFrame)
+            {
+                _dropFramesUntilKeyFrame = false;
+                _logger.Info("WebRTC video sync: keyframe received, decode resumed.");
+            }
 
             var dropped = _videoStats.DroppedFrames;
             if (_videoFrameQueue.Count >= MaxVideoQueueLength)
             {
-                _videoFrameQueue.Dequeue();
-                dropped += 1;
+                dropped += (uint)_videoFrameQueue.Count;
+                _videoFrameQueue.Clear();
+                _dropFramesUntilKeyFrame = true;
+                shouldRequestKeyFrame = true;
             }
 
             var timestampUnixMs = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -494,7 +490,7 @@ public sealed class WebRtcPeerConnectionService : IDisposable
                 Sequence: sequence,
                 TimestampUnixMs: timestampUnixMs,
                 Flags: 0,
-                IsKeyFrame: false,
+                IsKeyFrame: isKeyFrame,
                 HasCodecConfig: false,
                 CodecName: _currentVideoCodecName,
                 Payload: payload
@@ -530,6 +526,12 @@ public sealed class WebRtcPeerConnectionService : IDisposable
                 ReceivedBitrateKbps: _receiveBitrateKbps,
                 PliRequests: _pliRequests
             );
+        }
+
+        if (shouldRequestKeyFrame)
+        {
+            _logger.Info("WebRTC video queue overflow: requesting keyframe and resync.");
+            RequestVideoKeyFrame();
         }
     }
 
@@ -581,5 +583,21 @@ public sealed class WebRtcPeerConnectionService : IDisposable
         }
 
         return match.Groups[1].Value + replacementIp + match.Groups[3].Value;
+    }
+
+    private static bool IsKeyFrame(byte[] payload, string codecName)
+    {
+        if (payload.Length == 0)
+        {
+            return false;
+        }
+
+        if (!codecName.Equals("VP8", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var vp8FrameTag = payload[0];
+        return (vp8FrameTag & 0x01) == 0;
     }
 }
