@@ -6,7 +6,6 @@ public sealed partial class WebRtcPeerConnectionService
 {
     private void HandleVideoFrame(byte[] payload, string codecName)
     {
-        var shouldRequestKeyFrame = false;
         lock (_stateLock)
         {
             var sequence = _lastVideoSequence + 1;
@@ -14,35 +13,11 @@ public sealed partial class WebRtcPeerConnectionService
             _currentVideoCodecName = codecName;
             var isKeyFrame = IsKeyFrame(payload, _currentVideoCodecName);
 
-            if (_dropFramesUntilKeyFrame && !isKeyFrame)
-            {
-                _videoStats = _videoStats with
-                {
-                    LastSequence = sequence,
-                    LastTimestampUnixMs = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    LastPayloadSize = payload.Length,
-                    RawRtpPackets = _rawVideoRtpPackets,
-                    ReceivedFps = _receiveFps,
-                    ReceivedBitrateKbps = _receiveBitrateKbps,
-                    QueueDepth = (uint)_videoFrameQueue.Count,
-                    PliRequests = _pliRequests,
-                };
-                return;
-            }
-
-            if (_dropFramesUntilKeyFrame && isKeyFrame)
-            {
-                _dropFramesUntilKeyFrame = false;
-                _logger.Info("WebRTC video sync: keyframe received, decode resumed.");
-            }
-
             var dropped = _videoStats.DroppedFrames;
             if (_videoFrameQueue.Count >= MaxVideoQueueLength)
             {
-                dropped += (uint)_videoFrameQueue.Count;
-                _videoFrameQueue.Clear();
-                _dropFramesUntilKeyFrame = true;
-                shouldRequestKeyFrame = true;
+                _videoFrameQueue.Dequeue();
+                dropped += 1;
             }
 
             var timestampUnixMs = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -87,12 +62,6 @@ public sealed partial class WebRtcPeerConnectionService
                 ReceivedBitrateKbps: _receiveBitrateKbps,
                 PliRequests: _pliRequests
             );
-        }
-
-        if (shouldRequestKeyFrame)
-        {
-            _logger.Info("WebRTC video queue overflow: requesting keyframe and resync.");
-            RequestVideoKeyFrame();
         }
     }
 

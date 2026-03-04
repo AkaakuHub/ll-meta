@@ -1,3 +1,4 @@
+using LLMeta.App.Models;
 using LLMeta.App.Services;
 using LLMeta.App.Utils;
 using Stopwatch = System.Diagnostics.Stopwatch;
@@ -6,6 +7,9 @@ namespace LLMeta.App;
 
 public partial class App
 {
+    private const int DecodeCatchupQueueDepth = 3;
+    private const int DecodeCatchupQueueDelayMs = 60;
+
     private async Task VideoDecodeLoopAsync(CancellationToken token, AppLogger logger)
     {
         while (!token.IsCancellationRequested)
@@ -14,16 +18,33 @@ public partial class App
             {
                 var activeWebRtcPeerConnectionService = _webRtcPeerConnectionService;
                 var activeVideoDecodeService = _videoH264DecodeService;
+                var queueSnapshot = activeWebRtcPeerConnectionService?.GetVideoStatsSnapshot();
+                var shouldCatchupToLatest =
+                    queueSnapshot is not null
+                    && (
+                        queueSnapshot.Value.QueueDepth >= DecodeCatchupQueueDepth
+                        || queueSnapshot.Value.LastLatencyMs >= DecodeCatchupQueueDelayMs
+                    );
+                VideoFramePacket encodedPacket = default;
+                var hasPacket =
+                    activeWebRtcPeerConnectionService is not null
+                    && (
+                        shouldCatchupToLatest
+                            ? activeWebRtcPeerConnectionService.TryDequeueLatestVideoFrame(
+                                out encodedPacket
+                            )
+                            : activeWebRtcPeerConnectionService.TryDequeueVideoFrame(
+                                out encodedPacket
+                            )
+                    );
                 if (
                     activeWebRtcPeerConnectionService is null
                     || activeVideoDecodeService is null
-                    || !activeWebRtcPeerConnectionService.TryDequeueVideoFrame(
-                        out var encodedPacket
-                    )
+                    || !hasPacket
                 )
                 {
                     MaybeLogVideoPipelineStats(logger);
-                    await Task.Delay(1, token);
+                    await Task.Yield();
                     continue;
                 }
 
@@ -36,6 +57,12 @@ public partial class App
                 {
                     _videoH264DecodeService?.Dispose();
                     _videoH264DecodeService = new VideoH264DecodeService(logger);
+                    if (_openXrControllerInputService is not null)
+                    {
+                        _videoH264DecodeService.SetD3D11DevicePointer(
+                            _openXrControllerInputService.GetD3D11DevicePointer()
+                        );
+                    }
                     activeVideoDecodeService = _videoH264DecodeService;
                     lock (_runtimeStateLock)
                     {
@@ -84,7 +111,7 @@ public partial class App
                         _lastVideoDecodeStatus = "waiting keyframe";
                     }
                     MaybeLogVideoPipelineStats(logger);
-                    await Task.Delay(1, token);
+                    await Task.Yield();
                     continue;
                 }
 
@@ -92,9 +119,11 @@ public partial class App
                 {
                     _videoDecodeCalls += 1;
                 }
+                var decodeStartedAt = DateTimeOffset.UtcNow;
                 var decodeStopwatch = Stopwatch.StartNew();
                 var decodeStatus = activeVideoDecodeService.Decode(encodedPacket);
                 decodeStopwatch.Stop();
+                var decodeCompletedAt = DateTimeOffset.UtcNow;
                 lock (_runtimeStateLock)
                 {
                     _lastVideoDecodeStatus = decodeStatus;
@@ -146,17 +175,35 @@ public partial class App
                         }
                     }
                     var statsSnapshot = activeWebRtcPeerConnectionService.GetVideoStatsSnapshot();
+                    var renderStats = _openXrControllerInputService?.GetVideoRenderStatsSnapshot();
+                    var nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    var renderIdleMs =
+                        renderStats is null || renderStats.Value.LastRenderedAtUnixMs <= 0
+                            ? -1
+                            : nowUnixMs - renderStats.Value.LastRenderedAtUnixMs;
+                    if (renderIdleMs < 0)
+                    {
+                        renderIdleMs = 0;
+                    }
                     var syncStatus = _isWaitingForVideoKeyFrame
                         ? "sync=waiting-keyframe"
                         : "sync=ok";
                     _latestVideoStatus =
                         ConnectedVideoStatusPrefix
                         + _lastVideoDecodeStatus
+                        + $" | mode={(shouldCatchupToLatest ? "catchup" : "ordered")}"
                         + $" | {syncStatus}"
                         + $" | rxFps={statsSnapshot.ReceivedFps:F1}"
                         + $" | rxKbps={statsSnapshot.ReceivedBitrateKbps:F0}"
                         + $" | q={statsSnapshot.QueueDepth}"
                         + $" | qDelayMs={statsSnapshot.LastLatencyMs}"
+                        + $" | deqToDecMs={(decodeStartedAt - now).TotalMilliseconds:F0}"
+                        + $" | decToNowMs={(DateTimeOffset.UtcNow - decodeCompletedAt).TotalMilliseconds:F0}"
+                        + $" | renSeq={(renderStats?.LastRenderedSequence ?? 0)}"
+                        + $" | renAgeRxMs={(renderStats?.LastRenderedAgeFromReceiveMs ?? 0)}"
+                        + $" | renAgeDecMs={(renderStats?.LastRenderedAgeFromDecodeMs ?? 0)}"
+                        + $" | renFail={(renderStats?.LastUploadFailureCode ?? 0)}"
+                        + $" | renIdleMs={renderIdleMs}"
                         + $" | decMs={_lastDecodeElapsedMs}"
                         + EmulatorRouteHint;
                 }
@@ -225,6 +272,10 @@ public partial class App
                 + $"queue={stats.QueueDepth} queueDelayMs={stats.LastLatencyMs} "
                 + $"rxFps={stats.ReceivedFps:F1} rxKbps={stats.ReceivedBitrateKbps:F0} "
                 + $"rawRtpPkts={stats.RawRtpPackets} pliReq={stats.PliRequests} "
+                + $"renSeq={_openXrControllerInputService?.GetVideoRenderStatsSnapshot().LastRenderedSequence ?? 0} "
+                + $"renAgeRxMs={_openXrControllerInputService?.GetVideoRenderStatsSnapshot().LastRenderedAgeFromReceiveMs ?? 0} "
+                + $"renAgeDecMs={_openXrControllerInputService?.GetVideoRenderStatsSnapshot().LastRenderedAgeFromDecodeMs ?? 0} "
+                + $"renFail={_openXrControllerInputService?.GetVideoRenderStatsSnapshot().LastUploadFailureCode ?? 0} "
                 + $"decodeMs={decodeElapsedMs} "
                 + $"lastDecodeStatus={decodeStatus}"
         );

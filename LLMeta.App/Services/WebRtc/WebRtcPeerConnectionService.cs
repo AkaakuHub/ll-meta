@@ -9,7 +9,7 @@ namespace LLMeta.App.Services;
 
 public sealed partial class WebRtcPeerConnectionService : IDisposable
 {
-    private const int MaxVideoQueueLength = 24;
+    private const int MaxVideoQueueLength = 4;
     private static readonly Regex CandidateIpRegex = new(
         @"^(candidate:\S+\s+\d+\s+(?:udp|tcp)\s+\d+\s+)(\S+)(\s+\d+\s+typ\s+\S+.*)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant
@@ -35,7 +35,6 @@ public sealed partial class WebRtcPeerConnectionService : IDisposable
     private double _receiveFps;
     private double _receiveBitrateKbps;
     private uint _pliRequests;
-    private bool _dropFramesUntilKeyFrame;
 
     public WebRtcPeerConnectionService(AppLogger logger)
     {
@@ -81,6 +80,40 @@ public sealed partial class WebRtcPeerConnectionService : IDisposable
             {
                 LastLatencyMs = latencyMs,
                 QueueDepth = (uint)_videoFrameQueue.Count,
+            };
+            return true;
+        }
+    }
+
+    public bool TryDequeueLatestVideoFrame(out VideoFramePacket frame)
+    {
+        lock (_stateLock)
+        {
+            if (_videoFrameQueue.Count == 0)
+            {
+                frame = default;
+                return false;
+            }
+
+            frame = _videoFrameQueue.Dequeue();
+            var dropped = _videoStats.DroppedFrames;
+            while (_videoFrameQueue.Count > 0)
+            {
+                frame = _videoFrameQueue.Dequeue();
+                dropped += 1;
+            }
+
+            var nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var latencyMs = nowUnixMs - (long)frame.TimestampUnixMs;
+            if (latencyMs < 0)
+            {
+                latencyMs = 0;
+            }
+            _videoStats = _videoStats with
+            {
+                DroppedFrames = dropped,
+                LastLatencyMs = latencyMs,
+                QueueDepth = 0,
             };
             return true;
         }
@@ -134,7 +167,6 @@ public sealed partial class WebRtcPeerConnectionService : IDisposable
             _receiveFps = 0;
             _receiveBitrateKbps = 0;
             _pliRequests = 0;
-            _dropFramesUntilKeyFrame = false;
         }
         ClosePeerConnection();
     }

@@ -6,6 +6,9 @@ namespace LLMeta.App.Services;
 
 public sealed partial class VideoH264DecodeService
 {
+    private static readonly Guid Id3D11Texture2DGuid = new("6F15AAF2-D208-4E89-9AB4-489535D34F9C");
+    private static readonly Guid[] PreferredGpuOutputSubtypes = [VideoFormatGuids.NV12];
+
     private void ApplyDecoderInputType(Guid inputSubtype)
     {
         if (_decoder is null)
@@ -120,7 +123,7 @@ public sealed partial class VideoH264DecodeService
             }
 
             var streamInfo = _decoder.GetOutputStreamInfo(0);
-            using var outputSample = CreateOutputSample(streamInfo);
+            var outputSample = CreateOutputSample(streamInfo);
             var outputBuffer = new OutputDataBuffer
             {
                 StreamID = 0,
@@ -128,90 +131,129 @@ public sealed partial class VideoH264DecodeService
                 Status = 0,
                 Events = null!,
             };
-
-            var result = _decoder.ProcessOutput(
-                ProcessOutputFlags.None,
-                1,
-                ref outputBuffer,
-                out _
-            );
-            if (result == ResultCode.TransformNeedMoreInput)
+            try
             {
-                return true;
-            }
-
-            if (result == ResultCode.TransformStreamChange)
-            {
-                _outputTypeSet = false;
-                continue;
-            }
-
-            if (result.Failure)
-            {
-                throw new InvalidOperationException("ProcessOutput failed: " + result);
-            }
-
-            if (outputBuffer.Sample is null)
-            {
-                return true;
-            }
-
-            var contiguous = outputBuffer.Sample.ConvertToContiguousBuffer();
-            if (contiguous is null)
-            {
-                return true;
-            }
-
-            using (contiguous)
-            {
-                contiguous.Lock(out var pData, out _, out var currentLength);
-                try
+                var result = _decoder.ProcessOutput(
+                    ProcessOutputFlags.None,
+                    1,
+                    ref outputBuffer,
+                    out _
+                );
+                if (result == ResultCode.TransformNeedMoreInput)
                 {
-                    var bytes = new byte[currentLength];
-                    Marshal.Copy(pData, bytes, 0, currentLength);
-                    var bgra = _outputPixelFormat switch
+                    return true;
+                }
+
+                if (result == ResultCode.TransformStreamChange)
+                {
+                    _outputTypeSet = false;
+                    continue;
+                }
+
+                if (result.Failure)
+                {
+                    throw new InvalidOperationException("ProcessOutput failed: " + result);
+                }
+
+                if (outputBuffer.Sample is null)
+                {
+                    return true;
+                }
+
+                var dxgiBuffer = FindDxgiBuffer(outputBuffer.Sample);
+                if (dxgiBuffer is null)
+                {
+                    throw new InvalidOperationException(
+                        "Decoder output is not DXGI-backed. CPU fallback is disabled."
+                    );
+                }
+
+                using (dxgiBuffer)
+                {
+                    var sourceTexturePointer = dxgiBuffer.GetResource(Id3D11Texture2DGuid);
+                    if (sourceTexturePointer == IntPtr.Zero)
                     {
-                        DecoderOutputPixelFormat.Bgra32 => ConvertRgb32ToBgra(
-                            bytes,
-                            _outputWidth,
-                            _outputHeight
-                        ),
-                        DecoderOutputPixelFormat.Nv12 => ConvertNv12ToBgra(
-                            bytes,
-                            _outputWidth,
-                            _outputHeight
-                        ),
-                        _ => throw new InvalidOperationException(
-                            "Unsupported output pixel format."
-                        ),
-                    };
+                        throw new InvalidOperationException(
+                            "DXGI decode surface resource is unavailable."
+                        );
+                    }
+                    Marshal.AddRef(sourceTexturePointer);
+
                     var frame = new DecodedVideoFrame(
                         packet.Sequence,
                         packet.TimestampUnixMs,
+                        (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         _outputWidth,
                         _outputHeight,
-                        bgra
+                        sourceTexturePointer,
+                        (uint)dxgiBuffer.SubresourceIndex
                     );
                     lock (_frameLock)
                     {
+                        if (_latestFrame is { SourceTexturePointer: not 0 } previousFrame)
+                        {
+                            Marshal.Release(previousFrame.SourceTexturePointer);
+                        }
                         _latestFrame = frame;
                     }
                     if (!_loggedFirstDecodedFrame)
                     {
                         _loggedFirstDecodedFrame = true;
                         _logger.Info(
-                            "Video decoder first frame produced: "
+                            "Video decoder first DXGI frame produced: "
                                 + $"seq={packet.Sequence} width={_outputWidth} height={_outputHeight}"
                         );
                     }
                     producedFrame = true;
                 }
-                finally
+            }
+            finally
+            {
+                if (outputBuffer.Events is IDisposable outputEvents)
                 {
-                    contiguous.Unlock();
+                    outputEvents.Dispose();
                 }
+
+                if (
+                    outputBuffer.Sample is not null
+                    && !ReferenceEquals(outputBuffer.Sample, outputSample)
+                )
+                {
+                    outputBuffer.Sample.Dispose();
+                }
+
+                outputSample?.Dispose();
             }
         }
+    }
+
+    private static IMFDXGIBuffer? FindDxgiBuffer(IMFSample sample)
+    {
+        var bufferCount = sample.BufferCount;
+        for (var index = 0; index < bufferCount; index++)
+        {
+            IMFMediaBuffer? buffer = null;
+            try
+            {
+                buffer = sample.GetBufferByIndex(index);
+                if (buffer is null)
+                {
+                    continue;
+                }
+
+                var dxgiBuffer = buffer.QueryInterfaceOrNull<IMFDXGIBuffer>();
+                if (dxgiBuffer is not null)
+                {
+                    return dxgiBuffer;
+                }
+            }
+            finally
+            {
+                buffer?.Dispose();
+            }
+        }
+
+        return null;
     }
 
     private bool TrySetOutputType()
@@ -221,7 +263,8 @@ public sealed partial class VideoH264DecodeService
             return false;
         }
 
-        var firstNv12Index = -1;
+        var availableSubtypes = new List<Guid>();
+        var preferredSubtypeIndices = new Dictionary<Guid, int>();
         for (var index = 0; ; index++)
         {
             IMFMediaType? mediaType = null;
@@ -237,26 +280,53 @@ public sealed partial class VideoH264DecodeService
             using (mediaType)
             {
                 var subtype = mediaType.GetGUID(MediaTypeAttributeKeys.Subtype);
-                if (subtype == VideoFormatGuids.Rgb32)
+                if (mediaType.GetGUID(MediaTypeAttributeKeys.MajorType) != MediaTypeGuids.Video)
                 {
-                    return ApplyOutputType(mediaType, subtype);
+                    continue;
                 }
 
-                if (subtype == VideoFormatGuids.NV12 && firstNv12Index < 0)
+                availableSubtypes.Add(subtype);
+                if (
+                    PreferredGpuOutputSubtypes.Contains(subtype)
+                    && !preferredSubtypeIndices.ContainsKey(subtype)
+                )
                 {
-                    firstNv12Index = index;
+                    preferredSubtypeIndices[subtype] = index;
                 }
             }
         }
 
-        if (firstNv12Index < 0)
+        foreach (var preferredSubtype in PreferredGpuOutputSubtypes)
         {
-            return false;
+            if (!preferredSubtypeIndices.TryGetValue(preferredSubtype, out var typeIndex))
+            {
+                continue;
+            }
+
+            using var matchedType = _decoder.GetOutputAvailableType(0, typeIndex);
+            if (matchedType is null)
+            {
+                continue;
+            }
+
+            if (ApplyOutputType(matchedType, preferredSubtype))
+            {
+                return true;
+            }
         }
 
-        using var nv12Type = _decoder.GetOutputAvailableType(0, firstNv12Index);
-        var nv12Subtype = nv12Type.GetGUID(MediaTypeAttributeKeys.Subtype);
-        return ApplyOutputType(nv12Type, nv12Subtype);
+        if (availableSubtypes.Count > 0)
+        {
+            _logger.Info(
+                "Video decoder output type candidates: "
+                    + string.Join(
+                        ", ",
+                        availableSubtypes.Select(static subtype => DescribeOutputSubtype(subtype))
+                    )
+            );
+        }
+
+        return false;
     }
 
     private bool ApplyOutputType(IMFMediaType mediaType, Guid subtype)
@@ -270,16 +340,36 @@ public sealed partial class VideoH264DecodeService
         var frameSize = mediaType.GetUInt64(MediaTypeAttributeKeys.FrameSize);
         _outputWidth = (int)(frameSize >> 32);
         _outputHeight = (int)(frameSize & 0xFFFFFFFF);
-        _outputPixelFormat =
-            subtype == VideoFormatGuids.Rgb32
-                ? DecoderOutputPixelFormat.Bgra32
-                : DecoderOutputPixelFormat.Nv12;
         _outputTypeSet = _outputWidth > 0 && _outputHeight > 0;
         _logger.Info(
             "Video decoder output format ready: "
-                + $"width={_outputWidth} height={_outputHeight} subtype={subtype}"
+                + $"width={_outputWidth} height={_outputHeight} subtype={DescribeOutputSubtype(subtype)}"
         );
         return _outputTypeSet;
+    }
+
+    private static string DescribeOutputSubtype(Guid subtype)
+    {
+        if (subtype == VideoFormatGuids.NV12)
+            return "NV12";
+        if (subtype == VideoFormatGuids.P010)
+            return "P010";
+        if (subtype == VideoFormatGuids.P016)
+            return "P016";
+        if (subtype == VideoFormatGuids.YUY2)
+            return "YUY2";
+        if (subtype == VideoFormatGuids.I420)
+            return "I420";
+        if (subtype == VideoFormatGuids.Iyuv)
+            return "IYUV";
+        if (subtype == VideoFormatGuids.Yv12)
+            return "YV12";
+        if (subtype == VideoFormatGuids.Rgb32)
+            return "RGB32";
+        if (subtype == VideoFormatGuids.Argb32)
+            return "ARGB32";
+
+        return subtype.ToString();
     }
 
     private static IMFSample CreateOutputSample(OutputStreamInfo streamInfo)
@@ -297,6 +387,7 @@ public sealed partial class VideoH264DecodeService
 
     private void ResetDecoderAfterFailure()
     {
+        ReleaseLatestFrameIfNeeded();
         _decoder?.Dispose();
         _decoder = null;
         _outputTypeSet = false;
@@ -304,7 +395,6 @@ public sealed partial class VideoH264DecodeService
         _outputHeight = 0;
         _activeCodecKind = VideoCodecKind.Unknown;
         _activeCodecName = "unknown";
-        _outputPixelFormat = DecoderOutputPixelFormat.Unknown;
         _sampleTime100Ns = 0;
         _loggedFirstDecodedFrame = false;
     }

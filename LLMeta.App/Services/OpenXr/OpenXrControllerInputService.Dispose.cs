@@ -113,6 +113,7 @@ public sealed unsafe partial class OpenXrControllerInputService
             _session = default;
         }
 
+        ReleaseLatestVideoTexture();
         DestroyStereoRendering();
 
         if (_instance.Handle != 0)

@@ -1,4 +1,5 @@
 using LLMeta.App.Models;
+using LLMeta.App.Utils;
 using Silk.NET.Core;
 using Silk.NET.Core.Native;
 using Silk.NET.Direct3D11;
@@ -35,10 +36,54 @@ public sealed unsafe partial class OpenXrControllerInputService : IDisposable
     private bool _isSessionRunning;
     private bool _isInitialized;
     private string _bindingSupportSummary = string.Empty;
+    private readonly AppLogger? _logger;
+
+    public OpenXrControllerInputService(
+        string preferredSwapchainFormat = "Auto",
+        string preferredGraphicsAdapter = "Auto",
+        string preferredGraphicsBackend = "D3D11",
+        AppLogger? logger = null
+    )
+    {
+        _requestedSwapchainFormatLabel = NormalizePreferredSwapchainFormat(
+            preferredSwapchainFormat
+        );
+        _requestedGraphicsAdapterLabel = NormalizePreferredGraphicsAdapter(
+            preferredGraphicsAdapter
+        );
+        _requestedGraphicsBackendLabel = NormalizePreferredGraphicsBackend(
+            preferredGraphicsBackend
+        );
+        _logger = logger;
+    }
 
     public void SetLatestDecodedSbsFrame(DecodedVideoFrame frame)
     {
         UpdateLatestSbsFrame(frame);
+    }
+
+    public OpenXrVideoRenderConfigState GetVideoRenderConfigStateSnapshot()
+    {
+        lock (_videoFrameLock)
+        {
+            return new OpenXrVideoRenderConfigState(
+                _requestedSwapchainFormatLabel,
+                _selectedSwapchainFormatLabel,
+                _availableSwapchainFormatLabels.ToArray(),
+                _requestedGraphicsAdapterLabel,
+                _selectedGraphicsAdapterLabel,
+                _availableGraphicsAdapterLabels.ToArray(),
+                _requestedGraphicsBackendLabel,
+                _selectedGraphicsBackendLabel,
+                _availableGraphicsBackends.ToArray(),
+                _videoProcessorProbeSummary
+            );
+        }
+    }
+
+    public nint GetD3D11DevicePointer()
+    {
+        return (nint)_d3d11Device;
     }
 
     private OpenXrControllerState CreateState(string status)

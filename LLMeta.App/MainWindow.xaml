@@ -44,6 +44,34 @@
           Command="{Binding ReinitializeOpenXrCommand}"
           Margin="0,0,0,8"
         />
+        <TextBlock Text="Video render format (GPU only)" Foreground="Gray" Margin="0,0,0,4" />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+          <ComboBox
+            Width="180"
+            ItemsSource="{Binding SwapchainFormatOptions}"
+            SelectedItem="{Binding SelectedSwapchainFormatOption}"
+            Margin="0,0,8,0"
+          />
+          <ComboBox
+            Width="240"
+            ItemsSource="{Binding GraphicsAdapterOptions}"
+            SelectedItem="{Binding SelectedGraphicsAdapterOption}"
+            Margin="0,0,8,0"
+          />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+          <ComboBox
+            Width="180"
+            ItemsSource="{Binding GraphicsBackendOptions}"
+            SelectedItem="{Binding SelectedGraphicsBackendOption}"
+            Margin="0,0,8,0"
+          />
+          <Button
+            Content="Apply &amp; Reinitialize"
+            Width="160"
+            Command="{Binding ApplyVideoRenderSettingsCommand}"
+          />
+        </StackPanel>
         <TextBlock
           Foreground="Gray"
           TextWrapping="Wrap"
@@ -57,6 +85,17 @@
             <TextBlock Text="{Binding ActiveInputSource}" Margin="0,0,0,8" />
             <TextBlock Text="{Binding BridgeStatus}" Margin="0,0,0,8" />
             <TextBlock Text="{Binding VideoStatus}" Margin="0,0,0,8" TextWrapping="Wrap" />
+            <TextBlock
+              Text="{Binding VideoRenderConfigStatus}"
+              Margin="0,0,0,8"
+              TextWrapping="Wrap"
+            />
+            <TextBlock
+              Text="{Binding VideoRenderErrorStatus}"
+              Margin="0,0,0,8"
+              TextWrapping="Wrap"
+              Foreground="OrangeRed"
+            />
             <TextBlock Text="{Binding HmdPoseState}" TextWrapping="Wrap" Margin="0,0,0,8" />
             <TextBlock Text="{Binding LeftControllerState}" Margin="0,0,0,4" />
             <TextBlock Text="{Binding RightControllerState}" TextWrapping="Wrap" />

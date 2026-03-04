@@ -108,13 +108,30 @@ public sealed unsafe partial class OpenXrControllerInputService
             var initializeStereoResult = InitializeStereoRendering();
             if (initializeStereoResult != Result.Success)
             {
-                return CreateState($"InitializeStereoRendering failed: {initializeStereoResult}");
+                var detail =
+                    _swapchainFormatSummary.Length > 0
+                        ? $" ({_swapchainFormatSummary})"
+                        : string.Empty;
+                return CreateState(
+                    $"InitializeStereoRendering failed: {initializeStereoResult}{detail}"
+                );
             }
 
             _isInitialized = true;
-            if (_bindingSupportSummary.Length > 0)
+            if (_bindingSupportSummary.Length > 0 || _swapchainFormatSummary.Length > 0)
             {
-                return CreateState($"Initialized | {_bindingSupportSummary}");
+                var details = new List<string>();
+                if (_bindingSupportSummary.Length > 0)
+                {
+                    details.Add(_bindingSupportSummary);
+                }
+
+                if (_swapchainFormatSummary.Length > 0)
+                {
+                    details.Add(_swapchainFormatSummary);
+                }
+
+                return CreateState("Initialized | " + string.Join(", ", details));
             }
 
             return CreateState("Initialized");

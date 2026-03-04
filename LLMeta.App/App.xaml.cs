@@ -98,10 +98,18 @@ public partial class App : System.Windows.Application
             var settingsStore = new SettingsStore(logger);
             var settings = settingsStore.Load();
             var mainViewModel = new MainViewModel(settings, settingsStore, logger);
+            mainViewModel.SelectedSwapchainFormatOption = settings.PreferredSwapchainFormat;
+            mainViewModel.SelectedGraphicsAdapterOption = settings.PreferredGraphicsAdapter;
+            mainViewModel.SelectedGraphicsBackendOption = settings.PreferredGraphicsBackend;
             mainViewModel.OpenXrReinitializeRequested += () =>
             {
                 StopRealtimeLoops();
-                var reinitializeState = ReinitializeOpenXr(logger);
+                var reinitializeState = ReinitializeOpenXr(
+                    logger,
+                    settings.PreferredSwapchainFormat,
+                    settings.PreferredGraphicsAdapter,
+                    settings.PreferredGraphicsBackend
+                );
                 lock (_runtimeStateLock)
                 {
                     _latestOpenXrState = reinitializeState;
@@ -119,6 +127,35 @@ public partial class App : System.Windows.Application
                 {
                     mainViewModel.StatusMessage = "OpenXR reinitialize failed.";
                 }
+            };
+            mainViewModel.VideoRenderSettingsApplyRequested += (
+                preferredSwapchainFormat,
+                preferredGraphicsAdapter,
+                preferredGraphicsBackend
+            ) =>
+            {
+                settings.PreferredSwapchainFormat = preferredSwapchainFormat;
+                settings.PreferredGraphicsAdapter = preferredGraphicsAdapter;
+                settings.PreferredGraphicsBackend = preferredGraphicsBackend;
+                settingsStore.Save(settings);
+                StopRealtimeLoops();
+                var reinitializeState = ReinitializeOpenXr(
+                    logger,
+                    settings.PreferredSwapchainFormat,
+                    settings.PreferredGraphicsAdapter,
+                    settings.PreferredGraphicsBackend
+                );
+                lock (_runtimeStateLock)
+                {
+                    _latestOpenXrState = reinitializeState;
+                    _latestInputSource = reinitializeState.IsInitialized
+                        ? "Input source: OpenXR"
+                        : "Input source: unavailable";
+                }
+                StartRealtimeLoops(logger);
+                mainViewModel.StatusMessage = reinitializeState.IsInitialized
+                    ? $"Video render settings applied: {settings.PreferredSwapchainFormat}, {settings.PreferredGraphicsBackend}"
+                    : "Video render settings apply failed.";
             };
 
             _androidInputBridgeTcpServerService = new AndroidInputBridgeTcpServerService(
@@ -163,7 +200,12 @@ public partial class App : System.Windows.Application
             mainViewModel.VideoStatus = WaitingVideoStatus;
             logger.Info(_webRtcSignalingTcpServerService.StatusText);
 
-            var initializeState = ReinitializeOpenXr(logger);
+            var initializeState = ReinitializeOpenXr(
+                logger,
+                settings.PreferredSwapchainFormat,
+                settings.PreferredGraphicsAdapter,
+                settings.PreferredGraphicsBackend
+            );
             mainViewModel.UpdateOpenXrControllerState(initializeState);
             lock (_runtimeStateLock)
             {
@@ -210,6 +252,17 @@ public partial class App : System.Windows.Application
                     mainViewModel.ActiveInputSource = inputSourceSnapshot;
                     mainViewModel.UpdateOpenXrControllerState(stateSnapshot);
                     mainViewModel.VideoStatus = videoStatusSnapshot;
+                    if (_openXrControllerInputService is not null)
+                    {
+                        var renderConfig =
+                            _openXrControllerInputService.GetVideoRenderConfigStateSnapshot();
+                        var renderStats =
+                            _openXrControllerInputService.GetVideoRenderStatsSnapshot();
+                        mainViewModel.UpdateVideoRenderConfig(
+                            renderConfig,
+                            renderStats.LastUploadFailureCode
+                        );
+                    }
                     if (_androidInputBridgeTcpServerService is not null)
                     {
                         mainViewModel.BridgeStatus =

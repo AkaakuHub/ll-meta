@@ -31,7 +31,6 @@ public sealed partial class WebRtcPeerConnectionService
             _receiveFps = 0;
             _receiveBitrateKbps = 0;
             _pliRequests = 0;
-            _dropFramesUntilKeyFrame = false;
             _videoStats = new VideoStreamStats(
                 IsConnected: false,
                 LastSequence: 0,

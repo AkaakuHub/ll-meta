@@ -3,7 +3,9 @@ namespace LLMeta.App.Models;
 public readonly record struct DecodedVideoFrame(
     uint Sequence,
     ulong TimestampUnixMs,
+    ulong DecodedUnixMs,
     int Width,
     int Height,
-    byte[] BgraPixels
+    nint SourceTexturePointer,
+    uint SourceSubresourceIndex
 );

@@ -1,14 +1,27 @@
+using System.Runtime.InteropServices;
 using LLMeta.App.Models;
 using Silk.NET.Core.Native;
 using Silk.NET.Direct3D11;
+using Silk.NET.DXGI;
 using Silk.NET.OpenXR;
 
 namespace LLMeta.App.Services;
 
 public sealed unsafe partial class OpenXrControllerInputService
 {
+    private static readonly Guid Id3D11VideoDeviceGuid = new(
+        "10EC4D5B-975A-4689-B9E4-D0AAC30FE333"
+    );
+    private static readonly Guid Id3D11VideoContextGuid = new(
+        "61F21C45-3C0E-4A74-9CEA-67100D9AD5E4"
+    );
     private const int StereoViewCount = 2;
     private const long DxgiFormatB8G8R8A8Unorm = 87;
+    private const long DxgiFormatR8G8B8A8Unorm = 28;
+    private const long DxgiFormatNv12 = 103;
+    private const int DxgiErrorNotFound = unchecked((int)0x887A0002);
+    private const uint LowLatencyEyeWidth = 960;
+    private const uint LowLatencyEyeHeight = 1080;
 
     private readonly object _videoFrameLock = new();
     private readonly Swapchain[] _colorSwapchains = new Swapchain[StereoViewCount];
@@ -19,21 +32,80 @@ public sealed unsafe partial class OpenXrControllerInputService
         StereoViewCount
     ];
     private readonly View[] _views = new View[StereoViewCount];
-    private readonly byte[][] _eyeScratchBuffers = new byte[StereoViewCount][];
-    private readonly int[] _eyeScratchWidths = new int[StereoViewCount];
-    private readonly int[] _eyeScratchHeights = new int[StereoViewCount];
-    private readonly int[][] _eyeSampleXMaps = new int[StereoViewCount][];
-    private readonly int[][] _eyeSampleYMaps = new int[StereoViewCount][];
-    private readonly int[] _eyeMapSourceWidths = new int[StereoViewCount];
-    private readonly int[] _eyeMapSourceHeights = new int[StereoViewCount];
-    private readonly int[] _eyeMapTargetWidths = new int[StereoViewCount];
-    private readonly int[] _eyeMapTargetHeights = new int[StereoViewCount];
+    private readonly uint[] _swapchainRenderWidths = new uint[StereoViewCount];
+    private readonly uint[] _swapchainRenderHeights = new uint[StereoViewCount];
+    private long _colorSwapchainFormat;
+    private string _swapchainFormatSummary = string.Empty;
+    private ulong _requiredGraphicsAdapterLuid;
+    private bool _hasRequiredGraphicsAdapterLuid;
+    private string _graphicsAdapterSummary = string.Empty;
+    private string _requestedSwapchainFormatLabel = "Auto";
+    private string _selectedSwapchainFormatLabel = "unselected";
+    private string _videoProcessorProbeSummary = "not-probed";
+    private List<string> _availableSwapchainFormatLabels = ["Auto", "RGBA8", "BGRA8"];
+    private string _requestedGraphicsAdapterLabel = "Auto";
+    private string _selectedGraphicsAdapterLabel = "unselected";
+    private List<string> _availableGraphicsAdapterLabels = ["Auto"];
+    private string _requestedGraphicsBackendLabel = "D3D11";
+    private string _selectedGraphicsBackendLabel = "unselected";
+    private List<string> _availableGraphicsBackends = ["D3D11"];
 
-    private byte[]? _latestSbsBgra;
+    private ID3D11VideoDevice* _d3d11VideoDevice;
+    private ID3D11VideoContext* _d3d11VideoContext;
+    private ID3D11VideoProcessorEnumerator* _videoProcessorEnumerator;
+    private ID3D11VideoProcessor* _videoProcessor;
+    private ID3D11Texture2D* _videoProcessorOutputTexture;
+    private ID3D11VideoProcessorOutputView* _videoProcessorOutputView;
+    private ID3D11VideoProcessorInputView* _videoProcessorInputView;
+    private nint _videoProcessorInputTexturePointer;
+    private uint _videoProcessorInputSubresourceIndex;
+    private uint _videoProcessorInputWidth;
+    private uint _videoProcessorInputHeight;
+    private uint _videoProcessorOutputWidth;
+    private uint _videoProcessorOutputHeight;
+    private Format _videoProcessorOutputFormat;
+    private VideoUsage _videoProcessorUsage = VideoUsage.OptimalSpeed;
+
+    private nint _latestSbsSourceTexturePointer;
+    private uint _latestSbsSourceSubresourceIndex;
+    private ulong _latestSbsTimestampUnixMs;
+    private ulong _latestSbsDecodedUnixMs;
     private int _latestSbsWidth;
     private int _latestSbsHeight;
     private int _latestSbsVisibleHeight;
     private uint _latestVideoSequence;
+    private OpenXrVideoRenderStats _videoRenderStats;
+    private string _lastVideoProcessorFailureDetail = string.Empty;
+
+    private void ReleaseLatestVideoTexture()
+    {
+        lock (_videoFrameLock)
+        {
+            if (_latestSbsSourceTexturePointer != IntPtr.Zero)
+            {
+                Marshal.Release(_latestSbsSourceTexturePointer);
+                _latestSbsSourceTexturePointer = IntPtr.Zero;
+            }
+
+            _latestSbsSourceSubresourceIndex = 0;
+            _latestSbsTimestampUnixMs = 0;
+            _latestSbsDecodedUnixMs = 0;
+            _latestSbsWidth = 0;
+            _latestSbsHeight = 0;
+            _latestSbsVisibleHeight = 0;
+            _latestVideoSequence = 0;
+            _videoRenderStats = default;
+            _lastVideoProcessorFailureDetail = string.Empty;
+        }
+    }
+
+    public OpenXrVideoRenderStats GetVideoRenderStatsSnapshot()
+    {
+        lock (_videoFrameLock)
+        {
+            return _videoRenderStats;
+        }
+    }
 
     private Result InitializeStereoRendering()
     {
@@ -109,33 +181,86 @@ public sealed unsafe partial class OpenXrControllerInputService
         }
 
         var bgraSupported = false;
+        var rgbaSupported = false;
         foreach (var format in formats)
         {
             if (format == DxgiFormatB8G8R8A8Unorm)
             {
                 bgraSupported = true;
-                break;
+            }
+
+            if (format == DxgiFormatR8G8B8A8Unorm)
+            {
+                rgbaSupported = true;
             }
         }
 
-        if (!bgraSupported)
+        _swapchainFormatSummary =
+            "available="
+            + string.Join(", ", formats.Select(static format => DescribeSwapchainFormat(format)));
+        lock (_videoFrameLock)
+        {
+            _availableSwapchainFormatLabels = ["Auto"];
+            if (formats.Contains(DxgiFormatR8G8B8A8Unorm))
+            {
+                _availableSwapchainFormatLabels.Add("RGBA8");
+            }
+            if (formats.Contains(DxgiFormatB8G8R8A8Unorm))
+            {
+                _availableSwapchainFormatLabels.Add("BGRA8");
+            }
+        }
+        if (_graphicsAdapterSummary.Length > 0)
+        {
+            _swapchainFormatSummary = $"{_swapchainFormatSummary}, {_graphicsAdapterSummary}";
+        }
+        if (!bgraSupported && !rgbaSupported)
         {
             return Result.ErrorSwapchainFormatUnsupported;
         }
 
+        if (
+            !TrySelectSwapchainFormatForNv12VideoProcessor(
+                formats,
+                out _colorSwapchainFormat,
+                out var probeSummary
+            )
+        )
+        {
+            lock (_videoFrameLock)
+            {
+                _selectedSwapchainFormatLabel = "unselected";
+                _videoProcessorProbeSummary = probeSummary;
+            }
+            _swapchainFormatSummary = $"{_swapchainFormatSummary}, {probeSummary}";
+            return Result.ErrorSwapchainFormatUnsupported;
+        }
+
+        lock (_videoFrameLock)
+        {
+            _selectedSwapchainFormatLabel = ToUiSwapchainLabel(_colorSwapchainFormat);
+            _videoProcessorProbeSummary = probeSummary;
+            _selectedGraphicsBackendLabel = "D3D11";
+        }
+        _swapchainFormatSummary = $"{_swapchainFormatSummary}, {probeSummary}";
         for (var eye = 0; eye < StereoViewCount; eye++)
         {
             var viewConfig = _viewConfigurationViews[eye];
+            var swapchainWidth = Math.Min(viewConfig.RecommendedImageRectWidth, LowLatencyEyeWidth);
+            var swapchainHeight = Math.Min(
+                viewConfig.RecommendedImageRectHeight,
+                LowLatencyEyeHeight
+            );
             var swapchainCreateInfo = new SwapchainCreateInfo
             {
                 Type = StructureType.SwapchainCreateInfo,
                 CreateFlags = 0,
                 UsageFlags =
                     SwapchainUsageFlags.ColorAttachmentBit | SwapchainUsageFlags.SampledBit,
-                Format = DxgiFormatB8G8R8A8Unorm,
+                Format = _colorSwapchainFormat,
                 SampleCount = viewConfig.RecommendedSwapchainSampleCount,
-                Width = viewConfig.RecommendedImageRectWidth,
-                Height = viewConfig.RecommendedImageRectHeight,
+                Width = swapchainWidth,
+                Height = swapchainHeight,
                 FaceCount = 1,
                 ArraySize = 1,
                 MipCount = 1,
@@ -182,6 +307,8 @@ public sealed unsafe partial class OpenXrControllerInputService
                 }
             }
 
+            _swapchainRenderWidths[eye] = swapchainWidth;
+            _swapchainRenderHeights[eye] = swapchainHeight;
             _swapchainImages[eye] = images;
         }
 
@@ -205,5 +332,288 @@ public sealed unsafe partial class OpenXrControllerInputService
 
             _swapchainImages[eye] = [];
         }
+
+        ReleaseVideoProcessorResources();
+    }
+
+    private static string DescribeSwapchainFormat(long format)
+    {
+        if (format == DxgiFormatB8G8R8A8Unorm)
+        {
+            return "B8G8R8A8_UNORM";
+        }
+
+        if (format == DxgiFormatR8G8B8A8Unorm)
+        {
+            return "R8G8B8A8_UNORM";
+        }
+
+        if (format == DxgiFormatNv12)
+        {
+            return "NV12";
+        }
+
+        return format.ToString();
+    }
+
+    private bool TrySelectSwapchainFormatForNv12VideoProcessor(
+        IReadOnlyCollection<long> availableFormats,
+        out long selectedSwapchainFormat,
+        out string probeSummary
+    )
+    {
+        selectedSwapchainFormat = 0;
+        var candidateFormats = new List<long>();
+        if (availableFormats.Contains(DxgiFormatB8G8R8A8Unorm))
+        {
+            candidateFormats.Add(DxgiFormatB8G8R8A8Unorm);
+        }
+
+        if (availableFormats.Contains(DxgiFormatR8G8B8A8Unorm))
+        {
+            candidateFormats.Add(DxgiFormatR8G8B8A8Unorm);
+        }
+
+        if (candidateFormats.Count == 0)
+        {
+            probeSummary = "vpProbe=no-rgba-bgra-candidate";
+            return false;
+        }
+
+        candidateFormats = SortFormatsByUserPreference(
+            candidateFormats,
+            _requestedSwapchainFormatLabel
+        );
+        var usageCandidates = new[] { VideoUsage.OptimalSpeed, (VideoUsage)0, (VideoUsage)2 };
+        foreach (var usage in usageCandidates.Distinct())
+        {
+            if (
+                !TryProbeNv12VideoProcessorOutputSupport(
+                    1920,
+                    1080,
+                    1080,
+                    usage,
+                    out var nv12InputSupported,
+                    out var rgbaOutputSupported,
+                    out var bgraOutputSupported
+                )
+            )
+            {
+                continue;
+            }
+
+            if (!nv12InputSupported)
+            {
+                continue;
+            }
+
+            foreach (var candidateFormat in candidateFormats)
+            {
+                var outputSupported =
+                    candidateFormat == DxgiFormatR8G8B8A8Unorm
+                        ? rgbaOutputSupported
+                        : bgraOutputSupported;
+                if (!outputSupported)
+                {
+                    continue;
+                }
+
+                selectedSwapchainFormat = candidateFormat;
+                _videoProcessorUsage = usage;
+                probeSummary =
+                    $"vpProbe=ok usage={(int)usage} selected={DescribeSwapchainFormat(candidateFormat)} "
+                    + $"nv12In={nv12InputSupported} rgbaOut={rgbaOutputSupported} bgraOut={bgraOutputSupported}";
+                return true;
+            }
+        }
+
+        probeSummary = "vpProbe=unsupported nv12->rgba/bgra";
+        return false;
+    }
+
+    private bool TryProbeNv12VideoProcessorOutputSupport(
+        uint inputWidth,
+        uint inputHeight,
+        uint outputHeight,
+        VideoUsage usage,
+        out bool nv12InputSupported,
+        out bool rgbaOutputSupported,
+        out bool bgraOutputSupported
+    )
+    {
+        nv12InputSupported = false;
+        rgbaOutputSupported = false;
+        bgraOutputSupported = false;
+        if (_d3d11Device is null)
+        {
+            return false;
+        }
+
+        ID3D11VideoDevice* videoDevice = null;
+        ID3D11VideoProcessorEnumerator* enumerator = null;
+        try
+        {
+            void* videoDevicePointer = null;
+            var videoDeviceGuid = Id3D11VideoDeviceGuid;
+            if (
+                _d3d11Device->QueryInterface(ref videoDeviceGuid, ref videoDevicePointer) < 0
+                || videoDevicePointer is null
+            )
+            {
+                return false;
+            }
+
+            videoDevice = (ID3D11VideoDevice*)videoDevicePointer;
+            var contentDesc = new VideoProcessorContentDesc
+            {
+                InputFrameFormat = VideoFrameFormat.Progressive,
+                InputFrameRate = new Rational { Numerator = 60, Denominator = 1 },
+                InputWidth = inputWidth,
+                InputHeight = inputHeight,
+                OutputFrameRate = new Rational { Numerator = 60, Denominator = 1 },
+                OutputWidth = inputWidth,
+                OutputHeight = outputHeight,
+                Usage = usage,
+            };
+            if (
+                videoDevice->CreateVideoProcessorEnumerator(ref contentDesc, ref enumerator) < 0
+                || enumerator is null
+            )
+            {
+                return false;
+            }
+
+            uint sourceSupport = 0;
+            if (enumerator->CheckVideoProcessorFormat(Format.FormatNV12, ref sourceSupport) >= 0)
+            {
+                nv12InputSupported =
+                    ((VideoProcessorFormatSupport)sourceSupport & VideoProcessorFormatSupport.Input)
+                    != 0;
+            }
+
+            uint rgbaSupport = 0;
+            if (
+                enumerator->CheckVideoProcessorFormat(Format.FormatR8G8B8A8Unorm, ref rgbaSupport)
+                >= 0
+            )
+            {
+                rgbaOutputSupported =
+                    ((VideoProcessorFormatSupport)rgbaSupport & VideoProcessorFormatSupport.Output)
+                    != 0;
+            }
+
+            uint bgraSupport = 0;
+            if (
+                enumerator->CheckVideoProcessorFormat(Format.FormatB8G8R8A8Unorm, ref bgraSupport)
+                >= 0
+            )
+            {
+                bgraOutputSupported =
+                    ((VideoProcessorFormatSupport)bgraSupport & VideoProcessorFormatSupport.Output)
+                    != 0;
+            }
+
+            return true;
+        }
+        finally
+        {
+            if (enumerator is not null)
+            {
+                _ = enumerator->Release();
+            }
+
+            if (videoDevice is not null)
+            {
+                _ = videoDevice->Release();
+            }
+        }
+    }
+
+    private static List<long> SortFormatsByUserPreference(
+        List<long> formats,
+        string requestedSwapchainFormat
+    )
+    {
+        var requested = NormalizePreferredSwapchainFormat(requestedSwapchainFormat);
+        if (requested.Equals("RGBA8", StringComparison.OrdinalIgnoreCase))
+        {
+            return formats.Where(static format => format == DxgiFormatR8G8B8A8Unorm).ToList();
+        }
+
+        if (requested.Equals("BGRA8", StringComparison.OrdinalIgnoreCase))
+        {
+            return formats.Where(static format => format == DxgiFormatB8G8R8A8Unorm).ToList();
+        }
+
+        return formats;
+    }
+
+    private static string NormalizePreferredSwapchainFormat(string? preferredSwapchainFormat)
+    {
+        if (string.IsNullOrWhiteSpace(preferredSwapchainFormat))
+        {
+            return "Auto";
+        }
+
+        var normalized = preferredSwapchainFormat.Trim();
+        if (
+            normalized.Equals("R8G8B8A8_UNORM", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("RGBA8", StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            return "RGBA8";
+        }
+
+        if (
+            normalized.Equals("B8G8R8A8_UNORM", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("BGRA8", StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            return "BGRA8";
+        }
+
+        return "Auto";
+    }
+
+    private static string ToUiSwapchainLabel(long format)
+    {
+        if (format == DxgiFormatR8G8B8A8Unorm)
+        {
+            return "RGBA8";
+        }
+
+        if (format == DxgiFormatB8G8R8A8Unorm)
+        {
+            return "BGRA8";
+        }
+
+        return DescribeSwapchainFormat(format);
+    }
+
+    private static string NormalizePreferredGraphicsAdapter(string? preferredGraphicsAdapter)
+    {
+        if (string.IsNullOrWhiteSpace(preferredGraphicsAdapter))
+        {
+            return "Auto";
+        }
+
+        var normalized = preferredGraphicsAdapter.Trim();
+        return normalized;
+    }
+
+    private static string NormalizePreferredGraphicsBackend(string? preferredGraphicsBackend)
+    {
+        if (string.IsNullOrWhiteSpace(preferredGraphicsBackend))
+        {
+            return "D3D11";
+        }
+
+        var normalized = preferredGraphicsBackend.Trim();
+        if (normalized.Equals("D3D11", StringComparison.OrdinalIgnoreCase))
+        {
+            return "D3D11";
+        }
+
+        return "D3D11";
     }
 }
