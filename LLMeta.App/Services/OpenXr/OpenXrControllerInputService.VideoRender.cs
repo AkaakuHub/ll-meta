@@ -57,6 +57,10 @@ public sealed unsafe partial class OpenXrControllerInputService
     private ID3D11Texture2D* _videoProcessorOutputTexture;
     private ID3D11VideoProcessorOutputView* _videoProcessorOutputView;
     private ID3D11VideoProcessorInputView* _videoProcessorInputView;
+    private ID3D11Texture2D* _blackClearTexture;
+    private uint _blackClearTextureWidth;
+    private uint _blackClearTextureHeight;
+    private Format _blackClearTextureFormat;
     private nint _videoProcessorInputTexturePointer;
     private uint _videoProcessorInputSubresourceIndex;
     private uint _videoProcessorInputWidth;

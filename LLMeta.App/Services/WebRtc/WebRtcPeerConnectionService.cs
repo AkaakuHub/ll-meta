@@ -127,6 +127,14 @@ public sealed partial class WebRtcPeerConnectionService : IDisposable
         }
     }
 
+    public string GetCurrentVideoCodecName()
+    {
+        lock (_stateLock)
+        {
+            return _currentVideoCodecName;
+        }
+    }
+
     public void RequestVideoKeyFrame()
     {
         RTCPeerConnection? activePeerConnection;

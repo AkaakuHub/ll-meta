@@ -12,6 +12,8 @@ public partial class App
     private const int ReceiveStallThresholdMs = 1500;
     private const int DecodeStallThresholdMs = 1200;
     private const int KeyFrameRequestIntervalMs = 1200;
+    private const int Vp8KeyFrameRequestIntervalMs = 250;
+    private const int Vp8NoFrameKeyFrameThreshold = 8;
     private const int VideoLoopStallLogThresholdMs = 2000;
     private const int VideoLoopStallLogIntervalMs = 1500;
     private const int RenderStallLogThresholdMs = 1500;
@@ -39,6 +41,15 @@ public partial class App
                     UpdateVideoLoopCheckpoint("set-d3d11-device-done");
                 }
                 var queueSnapshot = activeWebRtcPeerConnectionService?.GetVideoStatsSnapshot();
+                var currentVideoCodecName =
+                    activeWebRtcPeerConnectionService?.GetCurrentVideoCodecName() ?? "unknown";
+                var isVp8Stream = currentVideoCodecName.Equals(
+                    "VP8",
+                    StringComparison.OrdinalIgnoreCase
+                );
+                var keyFrameRequestIntervalMs = isVp8Stream
+                    ? Vp8KeyFrameRequestIntervalMs
+                    : KeyFrameRequestIntervalMs;
                 bool waitingForKeyFrame;
                 uint consecutiveNoFrameDecodes;
                 lock (_runtimeStateLock)
@@ -48,6 +59,7 @@ public partial class App
                 }
                 var shouldCatchupToLatest =
                     queueSnapshot is not null
+                    && !isVp8Stream
                     && !waitingForKeyFrame
                     && consecutiveNoFrameDecodes < 3
                     && (
@@ -93,7 +105,7 @@ public partial class App
                                 if (
                                     _lastVideoKeyFrameRequestAt == DateTimeOffset.MinValue
                                     || (stallNow - _lastVideoKeyFrameRequestAt).TotalMilliseconds
-                                        >= KeyFrameRequestIntervalMs
+                                        >= keyFrameRequestIntervalMs
                                 )
                                 {
                                     _lastVideoKeyFrameRequestAt = stallNow;
@@ -169,7 +181,7 @@ public partial class App
                         if (
                             _lastVideoKeyFrameRequestAt == DateTimeOffset.MinValue
                             || (now - _lastVideoKeyFrameRequestAt).TotalMilliseconds
-                                >= KeyFrameRequestIntervalMs
+                                >= keyFrameRequestIntervalMs
                         )
                         {
                             _lastVideoKeyFrameRequestAt = now;
@@ -263,20 +275,28 @@ public partial class App
                         _lastVideoDecodedAt == DateTimeOffset.MinValue
                             ? double.MaxValue
                             : (now - _lastVideoDecodedAt).TotalMilliseconds;
+                    var noFrameKeyFrameThreshold = isVp8Stream ? Vp8NoFrameKeyFrameThreshold : 45;
                     var shouldRequestKeyFrame =
-                        _videoConsecutiveNoFrameDecodes >= 45 && stalledForMs >= 1200;
+                        _videoConsecutiveNoFrameDecodes >= noFrameKeyFrameThreshold
+                        && stalledForMs >= (isVp8Stream ? 220 : 1200);
                     if (shouldRequestKeyFrame)
                     {
                         if (
                             _lastVideoKeyFrameRequestAt == DateTimeOffset.MinValue
                             || (now - _lastVideoKeyFrameRequestAt).TotalMilliseconds
-                                >= KeyFrameRequestIntervalMs
+                                >= keyFrameRequestIntervalMs
                         )
                         {
                             _lastVideoKeyFrameRequestAt = now;
                             activeWebRtcPeerConnectionService.RequestVideoKeyFrame();
                             _videoConsecutiveNoFrameDecodes = 0;
-                            _isWaitingForVideoKeyFrame = true;
+                            if (!isVp8Stream)
+                            {
+                                _isWaitingForVideoKeyFrame = true;
+                            }
+                            _lastVideoDecodeStatus = isVp8Stream
+                                ? "decode gap; keyframe requested (non-blocking)"
+                                : "decode gap; keyframe requested";
                         }
                     }
                     var statsSnapshot = activeWebRtcPeerConnectionService.GetVideoStatsSnapshot();

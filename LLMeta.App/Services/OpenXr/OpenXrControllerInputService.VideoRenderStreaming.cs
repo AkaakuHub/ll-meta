@@ -297,9 +297,22 @@ public sealed unsafe partial class OpenXrControllerInputService
             return false;
         }
 
+        var copyWidth = Math.Min(halfWidth, (int)targetTextureDesc.Width);
+        var copyHeight = Math.Min(sourceVisibleHeight, (int)targetTextureDesc.Height);
+        if (copyWidth <= 0 || copyHeight <= 0)
+        {
+            uploadFailureCode = 48;
+            return false;
+        }
+
+        if (copyWidth < (int)targetTextureDesc.Width || copyHeight < (int)targetTextureDesc.Height)
+        {
+            ClearEyeTextureToBlack(texture);
+        }
+
         var sourceLeft = (uint)(eye == 0 ? 0 : halfWidth);
-        var sourceRight = (uint)(sourceLeft + halfWidth);
-        var sourceBottom = (uint)sourceVisibleHeight;
+        var sourceRight = (uint)(sourceLeft + copyWidth);
+        var sourceBottom = (uint)copyHeight;
         var sourceBox = new Box
         {
             Left = sourceLeft,
@@ -333,6 +346,96 @@ public sealed unsafe partial class OpenXrControllerInputService
             ageFromDecodeMs = 0;
         }
 
+        return true;
+    }
+
+    private void ClearEyeTextureToBlack(ID3D11Texture2D* texture)
+    {
+        if (_d3d11Device is null || _d3d11DeviceContext is null)
+        {
+            return;
+        }
+
+        Texture2DDesc targetDesc = default;
+        texture->GetDesc(&targetDesc);
+        if (!EnsureBlackClearTexture(targetDesc.Width, targetDesc.Height, targetDesc.Format))
+        {
+            return;
+        }
+
+        if (_blackClearTexture is null)
+        {
+            return;
+        }
+
+        _d3d11DeviceContext->CopySubresourceRegion(
+            (ID3D11Resource*)texture,
+            0,
+            0,
+            0,
+            0,
+            (ID3D11Resource*)_blackClearTexture,
+            0,
+            (Box*)0
+        );
+    }
+
+    private bool EnsureBlackClearTexture(uint width, uint height, Format format)
+    {
+        if (_d3d11Device is null)
+        {
+            return false;
+        }
+
+        var requiresRecreate =
+            _blackClearTexture is null
+            || _blackClearTextureWidth != width
+            || _blackClearTextureHeight != height
+            || _blackClearTextureFormat != format;
+        if (!requiresRecreate)
+        {
+            return true;
+        }
+
+        if (_blackClearTexture is not null)
+        {
+            _ = _blackClearTexture->Release();
+            _blackClearTexture = null;
+            _blackClearTextureWidth = 0;
+            _blackClearTextureHeight = 0;
+            _blackClearTextureFormat = 0;
+        }
+
+        var textureDesc = new Texture2DDesc
+        {
+            Width = width,
+            Height = height,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = format,
+            SampleDesc = new SampleDesc { Count = 1, Quality = 0 },
+            Usage = Usage.Default,
+            BindFlags = (uint)BindFlag.None,
+            CPUAccessFlags = 0,
+            MiscFlags = 0,
+        };
+
+        var createResult = _d3d11Device->CreateTexture2D(
+            ref textureDesc,
+            (SubresourceData*)0,
+            ref _blackClearTexture
+        );
+        if (createResult < 0 || _blackClearTexture is null)
+        {
+            _logger?.Info(
+                $"Black clear texture creation failed: hr=0x{createResult:X8} size={width}x{height} fmt={(int)format}"
+            );
+            return false;
+        }
+
+        _blackClearTextureWidth = width;
+        _blackClearTextureHeight = height;
+        _blackClearTextureFormat = format;
         return true;
     }
 
@@ -817,6 +920,15 @@ public sealed unsafe partial class OpenXrControllerInputService
     private void ReleaseVideoProcessorResources()
     {
         ReleaseVideoProcessorWorkingSet();
+
+        if (_blackClearTexture is not null)
+        {
+            _ = _blackClearTexture->Release();
+            _blackClearTexture = null;
+        }
+        _blackClearTextureWidth = 0;
+        _blackClearTextureHeight = 0;
+        _blackClearTextureFormat = 0;
 
         if (_d3d11VideoContext is not null)
         {
