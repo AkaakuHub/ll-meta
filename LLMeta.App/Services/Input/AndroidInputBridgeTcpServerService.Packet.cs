@@ -35,6 +35,20 @@ public sealed partial class AndroidInputBridgeTcpServerService
         BinaryPrimitives.WriteUInt32LittleEndian(body.Slice(68, 4), frame.ButtonsBitMask);
         BinaryPrimitives.WriteSingleLittleEndian(body.Slice(72, 4), frame.IpdMeters);
         BinaryPrimitives.WriteSingleLittleEndian(body.Slice(76, 4), frame.HmdVerticalFovDegrees);
+        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(80, 4), frame.LeftEyeAngleLeftRadians);
+        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(84, 4), frame.LeftEyeAngleRightRadians);
+        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(88, 4), frame.LeftEyeAngleUpRadians);
+        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(92, 4), frame.LeftEyeAngleDownRadians);
+        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(96, 4), frame.RightEyeAngleLeftRadians);
+        BinaryPrimitives.WriteSingleLittleEndian(
+            body.Slice(100, 4),
+            frame.RightEyeAngleRightRadians
+        );
+        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(104, 4), frame.RightEyeAngleUpRadians);
+        BinaryPrimitives.WriteSingleLittleEndian(
+            body.Slice(108, 4),
+            frame.RightEyeAngleDownRadians
+        );
     }
 
     private readonly record struct BridgeFrame(
@@ -56,6 +70,14 @@ public sealed partial class AndroidInputBridgeTcpServerService
         uint ButtonsBitMask,
         float IpdMeters,
         float HmdVerticalFovDegrees,
+        float LeftEyeAngleLeftRadians,
+        float LeftEyeAngleRightRadians,
+        float LeftEyeAngleUpRadians,
+        float LeftEyeAngleDownRadians,
+        float RightEyeAngleLeftRadians,
+        float RightEyeAngleRightRadians,
+        float RightEyeAngleUpRadians,
+        float RightEyeAngleDownRadians,
         byte Flags
     )
     {
@@ -68,7 +90,35 @@ public sealed partial class AndroidInputBridgeTcpServerService
         private const uint ButtonRightStickClick = 1 << 5;
 
         public static BridgeFrame Empty =>
-            new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.064f, 90.0f, 0);
+            new(
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0.064f,
+                90.0f,
+                -0.7853982f,
+                0.7853982f,
+                0.7853982f,
+                -0.7853982f,
+                -0.7853982f,
+                0.7853982f,
+                0.7853982f,
+                -0.7853982f,
+                0
+            );
 
         public static BridgeFrame FromState(OpenXrControllerState state, bool isKeyboardDebugMode)
         {
@@ -128,6 +178,14 @@ public sealed partial class AndroidInputBridgeTcpServerService
                 buttons,
                 state.IpdMeters,
                 state.HmdVerticalFovDegrees,
+                state.LeftEyeAngleLeftRadians,
+                state.LeftEyeAngleRightRadians,
+                state.LeftEyeAngleUpRadians,
+                state.LeftEyeAngleDownRadians,
+                state.RightEyeAngleLeftRadians,
+                state.RightEyeAngleRightRadians,
+                state.RightEyeAngleUpRadians,
+                state.RightEyeAngleDownRadians,
                 flags
             );
         }

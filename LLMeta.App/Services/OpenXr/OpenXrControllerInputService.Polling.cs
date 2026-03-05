@@ -65,7 +65,9 @@ public sealed unsafe partial class OpenXrControllerInputService
         var headPose = LocateHeadPose();
         var ipdMeters = GetCurrentIpdMeters();
         var hmdVerticalFovDegrees = GetCurrentVerticalFovDegrees();
-        LogInputTelemetry(ipdMeters, hmdVerticalFovDegrees);
+        var leftEyeFov = GetCurrentEyeFovRadians(0, hmdVerticalFovDegrees);
+        var rightEyeFov = GetCurrentEyeFovRadians(1, hmdVerticalFovDegrees);
+        LogInputTelemetry(ipdMeters, hmdVerticalFovDegrees, leftEyeFov, rightEyeFov);
 
         return new OpenXrControllerState(
             true,
@@ -73,6 +75,14 @@ public sealed unsafe partial class OpenXrControllerInputService
             headPose,
             ipdMeters,
             hmdVerticalFovDegrees,
+            leftEyeFov.AngleLeft,
+            leftEyeFov.AngleRight,
+            leftEyeFov.AngleUp,
+            leftEyeFov.AngleDown,
+            rightEyeFov.AngleLeft,
+            rightEyeFov.AngleRight,
+            rightEyeFov.AngleUp,
+            rightEyeFov.AngleDown,
             leftStick.X,
             leftStick.Y,
             rightStick.X,
@@ -132,7 +142,51 @@ public sealed unsafe partial class OpenXrControllerInputService
         return verticalFovDegrees;
     }
 
-    private void LogInputTelemetry(float ipdMeters, float hmdVerticalFovDegrees)
+    private Fovf GetCurrentEyeFovRadians(int eyeIndex, float fallbackVerticalFovDegrees)
+    {
+        var fallbackHalfVertical = (fallbackVerticalFovDegrees * 0.0174532925f) * 0.5f;
+        var fallback = new Fovf
+        {
+            AngleLeft = -fallbackHalfVertical,
+            AngleRight = fallbackHalfVertical,
+            AngleUp = fallbackHalfVertical,
+            AngleDown = -fallbackHalfVertical,
+        };
+
+        if (eyeIndex < 0 || eyeIndex >= _views.Length)
+        {
+            return fallback;
+        }
+
+        var fov = _views[eyeIndex].Fov;
+        if (
+            float.IsNaN(fov.AngleLeft)
+            || float.IsNaN(fov.AngleRight)
+            || float.IsNaN(fov.AngleUp)
+            || float.IsNaN(fov.AngleDown)
+            || float.IsInfinity(fov.AngleLeft)
+            || float.IsInfinity(fov.AngleRight)
+            || float.IsInfinity(fov.AngleUp)
+            || float.IsInfinity(fov.AngleDown)
+        )
+        {
+            return fallback;
+        }
+
+        if (fov.AngleLeft >= fov.AngleRight || fov.AngleDown >= fov.AngleUp)
+        {
+            return fallback;
+        }
+
+        return fov;
+    }
+
+    private void LogInputTelemetry(
+        float ipdMeters,
+        float hmdVerticalFovDegrees,
+        Fovf leftFov,
+        Fovf rightFov
+    )
     {
         if (_logger is null)
         {
@@ -146,14 +200,12 @@ public sealed unsafe partial class OpenXrControllerInputService
         }
 
         _lastInputTelemetryLogUnixMs = nowUnixMs;
-        var leftFov = _views[0].Fov;
-        var rightFov = _views[1].Fov;
         _logger.Info(
             "OpenXR telemetry: "
                 + $"ipdMeters={ipdMeters:F4} "
                 + $"vFovDeg={hmdVerticalFovDegrees:F2} "
-                + $"leftFovUpDown=({leftFov.AngleUp:F4},{leftFov.AngleDown:F4}) "
-                + $"rightFovUpDown=({rightFov.AngleUp:F4},{rightFov.AngleDown:F4})"
+                + $"leftFov=(L:{leftFov.AngleLeft:F4},R:{leftFov.AngleRight:F4},U:{leftFov.AngleUp:F4},D:{leftFov.AngleDown:F4}) "
+                + $"rightFov=(L:{rightFov.AngleLeft:F4},R:{rightFov.AngleRight:F4},U:{rightFov.AngleUp:F4},D:{rightFov.AngleDown:F4})"
         );
     }
 }

@@ -334,6 +334,21 @@ public sealed unsafe partial class OpenXrControllerInputService
             &sourceBox
         );
         var nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        const long sbsTelemetryIntervalMs = 1000;
+        if (nowUnixMs - _lastSbsSplitTelemetryLogUnixMs >= sbsTelemetryIntervalMs)
+        {
+            _lastSbsSplitTelemetryLogUnixMs = nowUnixMs;
+            var eyeLabel = eye == 0 ? "left" : "right";
+            _logger?.Info(
+                "SBS split telemetry: "
+                    + $"eye={eyeLabel} "
+                    + $"sourceSize={sourceWidth}x{sourceVisibleHeight} "
+                    + $"halfWidth={halfWidth} "
+                    + $"copyRect=({sourceLeft},0)-({sourceRight},{sourceBottom}) "
+                    + $"targetSize={targetTextureDesc.Width}x{targetTextureDesc.Height} "
+                    + "expectedOrder=leftThenRight"
+            );
+        }
         ageFromReceiveMs = sourceTimestampUnixMs == 0 ? 0 : nowUnixMs - (long)sourceTimestampUnixMs;
         ageFromDecodeMs = sourceDecodedUnixMs == 0 ? 0 : nowUnixMs - (long)sourceDecodedUnixMs;
         if (ageFromReceiveMs < 0)

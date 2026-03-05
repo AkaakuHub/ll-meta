@@ -37,6 +37,7 @@ public sealed unsafe partial class OpenXrControllerInputService : IDisposable
     private bool _isInitialized;
     private string _bindingSupportSummary = string.Empty;
     private long _lastInputTelemetryLogUnixMs;
+    private long _lastSbsSplitTelemetryLogUnixMs;
     private readonly AppLogger? _logger;
 
     public OpenXrControllerInputService(
@@ -114,6 +115,14 @@ public sealed unsafe partial class OpenXrControllerInputService : IDisposable
             ),
             0.064f,
             90.0f,
+            -0.7853982f,
+            0.7853982f,
+            0.7853982f,
+            -0.7853982f,
+            -0.7853982f,
+            0.7853982f,
+            0.7853982f,
+            -0.7853982f,
             0,
             0,
             0,
