@@ -8,7 +8,7 @@ namespace LLMeta.App.Services;
 public sealed partial class AndroidInputBridgeTcpServerService : IDisposable
 {
     private const int HeaderSize = 8;
-    private const int BodySize = 72;
+    private const int BodySize = 80;
     private const int PacketSize = HeaderSize + BodySize;
     private const uint Magic = 0x4C4D4554; // "LMET"
     private const byte Version = 1;

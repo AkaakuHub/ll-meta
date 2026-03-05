@@ -63,11 +63,16 @@ public sealed unsafe partial class OpenXrControllerInputService
         var leftStickClick = GetBooleanActionState(_leftStickClickAction);
         var rightStickClick = GetBooleanActionState(_rightStickClickAction);
         var headPose = LocateHeadPose();
+        var ipdMeters = GetCurrentIpdMeters();
+        var hmdVerticalFovDegrees = GetCurrentVerticalFovDegrees();
+        LogInputTelemetry(ipdMeters, hmdVerticalFovDegrees);
 
         return new OpenXrControllerState(
             true,
             $"Session state: {_sessionState}",
             headPose,
+            ipdMeters,
+            hmdVerticalFovDegrees,
             leftStick.X,
             leftStick.Y,
             rightStick.X,
@@ -82,6 +87,73 @@ public sealed unsafe partial class OpenXrControllerInputService
             leftY,
             rightA,
             rightB
+        );
+    }
+
+    private float GetCurrentIpdMeters()
+    {
+        const float fallbackIpdMeters = 0.064f;
+        var left = _views[0].Pose.Position;
+        var right = _views[1].Pose.Position;
+        var dx = right.X - left.X;
+        var dy = right.Y - left.Y;
+        var dz = right.Z - left.Z;
+        var ipdMeters = MathF.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
+        if (float.IsNaN(ipdMeters) || float.IsInfinity(ipdMeters))
+        {
+            return fallbackIpdMeters;
+        }
+
+        if (ipdMeters < 0.01f || ipdMeters > 0.12f)
+        {
+            return fallbackIpdMeters;
+        }
+
+        return ipdMeters;
+    }
+
+    private float GetCurrentVerticalFovDegrees()
+    {
+        const float fallbackVerticalFovDegrees = 90.0f;
+        var leftFov = _views[0].Fov;
+        var verticalFovRad = leftFov.AngleUp - leftFov.AngleDown;
+        if (float.IsNaN(verticalFovRad) || float.IsInfinity(verticalFovRad))
+        {
+            return fallbackVerticalFovDegrees;
+        }
+
+        const float radToDeg = 57.2957795f;
+        var verticalFovDegrees = verticalFovRad * radToDeg;
+        if (verticalFovDegrees < 20.0f || verticalFovDegrees > 170.0f)
+        {
+            return fallbackVerticalFovDegrees;
+        }
+
+        return verticalFovDegrees;
+    }
+
+    private void LogInputTelemetry(float ipdMeters, float hmdVerticalFovDegrees)
+    {
+        if (_logger is null)
+        {
+            return;
+        }
+
+        var nowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        if (nowUnixMs - _lastInputTelemetryLogUnixMs < 1000)
+        {
+            return;
+        }
+
+        _lastInputTelemetryLogUnixMs = nowUnixMs;
+        var leftFov = _views[0].Fov;
+        var rightFov = _views[1].Fov;
+        _logger.Info(
+            "OpenXR telemetry: "
+                + $"ipdMeters={ipdMeters:F4} "
+                + $"vFovDeg={hmdVerticalFovDegrees:F2} "
+                + $"leftFovUpDown=({leftFov.AngleUp:F4},{leftFov.AngleDown:F4}) "
+                + $"rightFovUpDown=({rightFov.AngleUp:F4},{rightFov.AngleDown:F4})"
         );
     }
 }

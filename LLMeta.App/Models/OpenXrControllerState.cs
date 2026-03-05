@@ -4,6 +4,8 @@ public readonly record struct OpenXrControllerState(
     bool IsInitialized,
     string Status,
     OpenXrHeadPoseState HeadPose,
+    float IpdMeters,
+    float HmdVerticalFovDegrees,
     float LeftStickX,
     float LeftStickY,
     float RightStickX,

@@ -51,6 +51,8 @@ public sealed class KeyboardInputEmulatorService
                 0,
                 0
             ),
+            0.064f,
+            90.0f,
             BuildAxis(Key.A, Key.D),
             BuildAxis(Key.S, Key.W),
             BuildAxis(Key.J, Key.L),
@@ -93,6 +95,8 @@ public sealed class KeyboardInputEmulatorService
                 0,
                 0
             ),
+            0.064f,
+            90.0f,
             0,
             0,
             0,

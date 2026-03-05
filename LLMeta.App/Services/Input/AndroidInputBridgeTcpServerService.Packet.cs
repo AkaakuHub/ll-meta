@@ -33,6 +33,8 @@ public sealed partial class AndroidInputBridgeTcpServerService
         BinaryPrimitives.WriteSingleLittleEndian(body.Slice(60, 4), frame.HmdPositionY);
         BinaryPrimitives.WriteSingleLittleEndian(body.Slice(64, 4), frame.HmdPositionZ);
         BinaryPrimitives.WriteUInt32LittleEndian(body.Slice(68, 4), frame.ButtonsBitMask);
+        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(72, 4), frame.IpdMeters);
+        BinaryPrimitives.WriteSingleLittleEndian(body.Slice(76, 4), frame.HmdVerticalFovDegrees);
     }
 
     private readonly record struct BridgeFrame(
@@ -52,6 +54,8 @@ public sealed partial class AndroidInputBridgeTcpServerService
         float HmdPositionY,
         float HmdPositionZ,
         uint ButtonsBitMask,
+        float IpdMeters,
+        float HmdVerticalFovDegrees,
         byte Flags
     )
     {
@@ -63,7 +67,8 @@ public sealed partial class AndroidInputBridgeTcpServerService
         private const uint ButtonLeftStickClick = 1 << 4;
         private const uint ButtonRightStickClick = 1 << 5;
 
-        public static BridgeFrame Empty => new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        public static BridgeFrame Empty =>
+            new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.064f, 90.0f, 0);
 
         public static BridgeFrame FromState(OpenXrControllerState state, bool isKeyboardDebugMode)
         {
@@ -121,6 +126,8 @@ public sealed partial class AndroidInputBridgeTcpServerService
                 state.HeadPose.PositionY,
                 state.HeadPose.PositionZ,
                 buttons,
+                state.IpdMeters,
+                state.HmdVerticalFovDegrees,
                 flags
             );
         }
