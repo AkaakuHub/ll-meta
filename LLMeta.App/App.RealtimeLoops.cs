@@ -86,7 +86,7 @@ public partial class App
                     _latestInputSource = inputSource;
                 }
 
-                _webRtcPeerConnectionService?.UpdateLatestInputState(state, keyboardDebugMode);
+                _windowsInputTcpServerService?.UpdateLatestInputState(state, keyboardDebugMode);
             }
             catch (OperationCanceledException)
             {

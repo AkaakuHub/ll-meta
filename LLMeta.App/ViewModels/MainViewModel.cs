@@ -17,7 +17,7 @@ public sealed class MainViewModel : ViewModelBase
     private string _statusMessage = "Ready";
     private string _sampleText = string.Empty;
     private string _openXrInputStatus = "OpenXR input: not initialized";
-    private string _bridgeStatus = "Bridge: not started";
+    private string _bridgeStatus = "Input TCP: not started";
     private string _videoStatus = "Video: not started";
     private bool _isKeyboardDebugMode;
     private string _activeInputSource = "Input source: not selected";
@@ -32,16 +32,16 @@ public sealed class MainViewModel : ViewModelBase
     private string _selectedGraphicsBackendOption = "D3D11";
     private string _videoRenderConfigStatus = "Video render config: not initialized";
     private string _videoRenderErrorStatus = "Video render error: none";
-    private string _webRtcSignalingPort = string.Empty;
+    private string _windowsInputTcpPort = string.Empty;
     private string _captureStatus = "Capture: not selected";
 
     public MainViewModel(AppSettings settings, SettingsStore settingsStore, AppLogger logger)
     {
         _logger = logger;
         _sampleText = settings.SampleText;
-        _webRtcSignalingPort = settings.WebRtcSignalingPort.ToString(CultureInfo.InvariantCulture);
+        _windowsInputTcpPort = settings.WindowsInputTcpPort.ToString(CultureInfo.InvariantCulture);
 
-        ApplySignalingPortCommand = new RelayCommand(_ => ApplySignalingPort());
+        ApplyInputTcpPortCommand = new RelayCommand(_ => ApplyInputTcpPort());
         ReinitializeOpenXrCommand = new RelayCommand(_ => RequestReinitializeOpenXr());
         ApplyVideoRenderSettingsCommand = new RelayCommand(_ => RequestApplyVideoRenderSettings());
         SelectCaptureTargetCommand = new RelayCommand(_ => RequestSelectCaptureTarget());
@@ -89,13 +89,13 @@ public sealed class MainViewModel : ViewModelBase
         set => SetProperty(ref _rightControllerState, value);
     }
 
-    public ICommand ApplySignalingPortCommand { get; }
+    public ICommand ApplyInputTcpPortCommand { get; }
     public ICommand ReinitializeOpenXrCommand { get; }
     public ICommand ApplyVideoRenderSettingsCommand { get; }
     public ICommand SelectCaptureTargetCommand { get; }
 
     public event Action? OpenXrReinitializeRequested;
-    public event Action<int>? SignalingPortApplyRequested;
+    public event Action<int>? InputTcpPortApplyRequested;
     public event Action<string, string, string>? VideoRenderSettingsApplyRequested;
     public event Action? CaptureTargetSelectionRequested;
 
@@ -168,10 +168,10 @@ public sealed class MainViewModel : ViewModelBase
         set => SetProperty(ref _videoRenderErrorStatus, value);
     }
 
-    public string WebRtcSignalingPort
+    public string WindowsInputTcpPort
     {
-        get => _webRtcSignalingPort;
-        set => SetProperty(ref _webRtcSignalingPort, value);
+        get => _windowsInputTcpPort;
+        set => SetProperty(ref _windowsInputTcpPort, value);
     }
 
     public string CaptureStatus
@@ -238,16 +238,16 @@ public sealed class MainViewModel : ViewModelBase
             $"Right Stick ({state.RightStickX:0.00}, {state.RightStickY:0.00}) Click:{ToOnOff(state.RightStickClickPressed)} | A:{ToOnOff(state.RightAPressed)} B:{ToOnOff(state.RightBPressed)} | Trigger:{state.RightTriggerValue:0.00} | Grip:{state.RightGripValue:0.00}";
     }
 
-    public void SetSignalingPortForDisplay(int port)
+    public void SetInputTcpPortForDisplay(int port)
     {
-        WebRtcSignalingPort = port.ToString(CultureInfo.InvariantCulture);
+        WindowsInputTcpPort = port.ToString(CultureInfo.InvariantCulture);
     }
 
-    private void ApplySignalingPort()
+    private void ApplyInputTcpPort()
     {
         if (
             !int.TryParse(
-                WebRtcSignalingPort.Trim(),
+                WindowsInputTcpPort.Trim(),
                 NumberStyles.Integer,
                 CultureInfo.InvariantCulture,
                 out var port
@@ -264,10 +264,10 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        WebRtcSignalingPort = port.ToString(CultureInfo.InvariantCulture);
-        SignalingPortApplyRequested?.Invoke(port);
-        StatusMessage = $"Signaling port save requested: {port}";
-        _logger.Info($"Signaling port save requested: {port}");
+        WindowsInputTcpPort = port.ToString(CultureInfo.InvariantCulture);
+        InputTcpPortApplyRequested?.Invoke(port);
+        StatusMessage = $"Input TCP port save requested: {port}";
+        _logger.Info($"Input TCP port save requested: {port}");
     }
 
     private static string ToOnOff(bool value)
@@ -372,7 +372,7 @@ public sealed class MainViewModel : ViewModelBase
             2 => "latest decoded texture unavailable",
             4 => "invalid stereo source width",
             31 => "format conversion entry failed",
-            32 => "source is not NV12",
+            32 => "source format conversion rejected",
             34 => "VideoProcessor resources missing",
             35 => "D3D11 device/context unavailable",
             36 => "ID3D11VideoDevice unavailable",

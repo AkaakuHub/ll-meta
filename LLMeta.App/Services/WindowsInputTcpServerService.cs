@@ -1,12 +1,68 @@
 using System.Buffers.Binary;
+using System.Net;
+using System.Net.Sockets;
 using LLMeta.App.Models;
-using SIPSorcery.Net;
+using LLMeta.App.Utils;
 
 namespace LLMeta.App.Services;
 
-public sealed partial class WebRtcPeerConnectionService
+public sealed class WindowsInputTcpServerService : IDisposable
 {
     private const int InputPayloadSize = 108;
+    private static readonly TimeSpan InputTickInterval = TimeSpan.FromMilliseconds(11);
+
+    private readonly AppLogger _logger;
+    private readonly object _stateLock = new();
+    private readonly object _clientLock = new();
+    private readonly int _port;
+    private TcpListener? _listener;
+    private CancellationTokenSource? _lifecycleCts;
+    private Task? _acceptLoopTask;
+    private Task? _sendLoopTask;
+    private TcpClient? _client;
+    private NetworkStream? _clientStream;
+    private OpenXrControllerState _latestInputState;
+    private bool _isKeyboardDebugMode;
+    private string _statusText;
+
+    public WindowsInputTcpServerService(AppLogger logger, int port)
+    {
+        _logger = logger;
+        _port = port;
+        _latestInputState = default;
+        _statusText = $"Input TCP: stopped ({port})";
+    }
+
+    public string StatusText
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _statusText;
+            }
+        }
+    }
+
+    public void Start()
+    {
+        if (_lifecycleCts is not null)
+        {
+            return;
+        }
+
+        _listener = new TcpListener(IPAddress.Any, _port);
+        _listener.Start();
+        _lifecycleCts = new CancellationTokenSource();
+        var token = _lifecycleCts.Token;
+        lock (_stateLock)
+        {
+            _statusText = $"Input TCP: listening on {_port}";
+        }
+
+        _acceptLoopTask = Task.Run(() => AcceptLoopAsync(token), token);
+        _sendLoopTask = Task.Run(() => SendLoopAsync(token), token);
+    }
 
     public void UpdateLatestInputState(OpenXrControllerState state, bool isKeyboardDebugMode)
     {
@@ -17,41 +73,112 @@ public sealed partial class WebRtcPeerConnectionService
         }
     }
 
-    public string GetInputChannelStatusText()
+    public void Dispose()
     {
+        var activeCts = _lifecycleCts;
+        _lifecycleCts = null;
+        if (activeCts is not null)
+        {
+            activeCts.Cancel();
+        }
+
+        try
+        {
+            CloseClient();
+            _listener?.Stop();
+        }
+        catch { }
+
+        try
+        {
+            Task.WaitAll(
+                new[] { _acceptLoopTask, _sendLoopTask }
+                    .Where(task => task is not null)
+                    .Cast<Task>()
+                    .ToArray(),
+                TimeSpan.FromSeconds(2)
+            );
+        }
+        catch { }
+
+        activeCts?.Dispose();
+        _acceptLoopTask = null;
+        _sendLoopTask = null;
+        _listener = null;
         lock (_stateLock)
         {
-            return _inputChannelStatusText;
+            _statusText = $"Input TCP: stopped ({_port})";
         }
     }
 
-    private void SetInputDataChannel(RTCDataChannel? channel)
+    private async Task AcceptLoopAsync(CancellationToken cancellationToken)
     {
-        lock (_stateLock)
+        var listener = _listener;
+        if (listener is null)
         {
-            _inputDataChannel = channel;
-            _inputChannelStatusText = channel is null
-                ? "Input channel: waiting data channel"
-                : $"Input channel: data channel ready ({channel.label})";
+            return;
+        }
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var client = await listener.AcceptTcpClientAsync(cancellationToken);
+                lock (_clientLock)
+                {
+                    CloseClient();
+                    _client = client;
+                    _client.NoDelay = true;
+                    _clientStream = client.GetStream();
+                }
+                lock (_stateLock)
+                {
+                    _statusText = $"Input TCP: client connected ({_port})";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("Input TCP accept failed.", ex);
+                lock (_stateLock)
+                {
+                    _statusText = $"Input TCP: accept error ({_port})";
+                }
+                try
+                {
+                    await Task.Delay(200, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
         }
     }
 
-    private async Task InputSendLoopAsync(CancellationToken cancellationToken)
+    private async Task SendLoopAsync(CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(InputTickInterval);
         var payload = new byte[InputPayloadSize];
+        using var timer = new PeriodicTimer(InputTickInterval);
 
         while (await timer.WaitForNextTickAsync(cancellationToken))
         {
-            RTCDataChannel? channel;
             InputFrame frame;
             lock (_stateLock)
             {
-                channel = _inputDataChannel;
                 frame = InputFrame.FromState(_latestInputState, _isKeyboardDebugMode);
             }
 
-            if (channel is null || channel.readyState != RTCDataChannelState.open)
+            NetworkStream? stream;
+            lock (_clientLock)
+            {
+                stream = _clientStream;
+            }
+
+            if (stream is null)
             {
                 continue;
             }
@@ -59,17 +186,43 @@ public sealed partial class WebRtcPeerConnectionService
             BuildInputPayload(payload, frame);
             try
             {
-                channel.send(payload);
+                await stream.WriteAsync(payload, cancellationToken);
+                await stream.FlushAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
             }
             catch (Exception ex)
             {
-                _logger.Error("WebRTC input data channel send failed.", ex);
+                _logger.Error("Input TCP send failed.", ex);
+                CloseClient();
                 lock (_stateLock)
                 {
-                    _inputDataChannel = null;
-                    _inputChannelStatusText = "Input channel: send error, waiting reconnect";
+                    _statusText = $"Input TCP: send error, waiting reconnect ({_port})";
                 }
             }
+        }
+    }
+
+    private void CloseClient()
+    {
+        lock (_clientLock)
+        {
+            try
+            {
+                _clientStream?.Dispose();
+            }
+            catch { }
+
+            try
+            {
+                _client?.Dispose();
+            }
+            catch { }
+
+            _clientStream = null;
+            _client = null;
         }
     }
 
@@ -192,7 +345,6 @@ public sealed partial class WebRtcPeerConnectionService
                 flags |= 1;
             }
 
-            // Send raw OpenXR pose values here. The receiver owns camera-mode conversion and session baselines.
             return new InputFrame(
                 state.LeftStickX,
                 state.LeftStickY,

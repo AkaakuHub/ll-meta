@@ -11,15 +11,14 @@ namespace LLMeta.App;
 
 public partial class App : System.Windows.Application
 {
-    private const int DefaultWebRtcSignalingPort = 39200;
+    private const int DefaultWindowsInputTcpPort = 39200;
     private const string EmulatorRouteHint = " (A-1: Android -> 10.0.2.2)";
     private const string OpenXrUnavailableReason =
         "OpenXR is not initialized. Click Reinitialize OpenXR or enable keyboard debug input.";
     private const string WaitingVideoStatus = "Video: waiting capture frame";
 
     private OpenXrControllerInputService? _openXrControllerInputService;
-    private WebRtcSignalingTcpServerService? _webRtcSignalingTcpServerService;
-    private WebRtcPeerConnectionService? _webRtcPeerConnectionService;
+    private WindowsInputTcpServerService? _windowsInputTcpServerService;
     private WindowCaptureService? _windowCaptureService;
     private readonly KeyboardInputEmulatorService _keyboardInputEmulatorService = new();
     private readonly object _runtimeStateLock = new();
@@ -88,14 +87,14 @@ public partial class App : System.Windows.Application
             mainViewModel.SelectedSwapchainFormatOption = settings.PreferredSwapchainFormat;
             mainViewModel.SelectedGraphicsAdapterOption = settings.PreferredGraphicsAdapter;
             mainViewModel.SelectedGraphicsBackendOption = settings.PreferredGraphicsBackend;
-            var signalingPort = ResolveValidWebRtcSignalingPort(settings.WebRtcSignalingPort);
-            if (settings.WebRtcSignalingPort != signalingPort)
+            var inputTcpPort = ResolveValidWindowsInputTcpPort(settings.WindowsInputTcpPort);
+            if (settings.WindowsInputTcpPort != inputTcpPort)
             {
-                settings.WebRtcSignalingPort = signalingPort;
+                settings.WindowsInputTcpPort = inputTcpPort;
                 settingsStore.Save(settings);
             }
 
-            mainViewModel.SetSignalingPortForDisplay(signalingPort);
+            mainViewModel.SetInputTcpPortForDisplay(inputTcpPort);
             mainViewModel.OpenXrReinitializeRequested += () =>
             {
                 StopRealtimeLoops();
@@ -126,13 +125,13 @@ public partial class App : System.Windows.Application
                     mainViewModel.StatusMessage = "OpenXR reinitialize failed.";
                 }
             };
-            mainViewModel.SignalingPortApplyRequested += port =>
+            mainViewModel.InputTcpPortApplyRequested += port =>
             {
-                settings.WebRtcSignalingPort = port;
+                settings.WindowsInputTcpPort = port;
                 settingsStore.Save(settings);
-                mainViewModel.SetSignalingPortForDisplay(port);
-                InitializeWebRtcSignalingServer(logger, port, mainViewModel);
-                mainViewModel.StatusMessage = $"WebRTC signaling port applied: {port}";
+                mainViewModel.SetInputTcpPortForDisplay(port);
+                InitializeWindowsInputTcpServer(logger, port, mainViewModel);
+                mainViewModel.StatusMessage = $"Windows input TCP port applied: {port}";
             };
             mainViewModel.VideoRenderSettingsApplyRequested += (
                 preferredSwapchainFormat,
@@ -190,29 +189,15 @@ public partial class App : System.Windows.Application
                 }
             };
 
-            InitializeWebRtcSignalingServer(logger, signalingPort, mainViewModel);
-            _webRtcPeerConnectionService = new WebRtcPeerConnectionService(logger);
+            InitializeWindowsInputTcpServer(logger, inputTcpPort, mainViewModel);
             _windowCaptureService = new WindowCaptureService(logger);
             _windowCaptureService.FrameCaptured += frame =>
             {
                 _openXrControllerInputService?.SetLatestDecodedSbsFrame(frame);
             };
             mainViewModel.BridgeStatus =
-                _webRtcPeerConnectionService.GetInputChannelStatusText() + EmulatorRouteHint;
-            _webRtcPeerConnectionService.OutboundSignalingMessage += outboundMessage =>
-            {
-                var signalingServer = _webRtcSignalingTcpServerService;
-                if (signalingServer is null)
-                {
-                    return;
-                }
-
-                var sent = signalingServer.TrySend(outboundMessage);
-                if (!sent)
-                {
-                    logger.Info($"WebRTC signaling tx dropped: type={outboundMessage.Type}");
-                }
-            };
+                (_windowsInputTcpServerService?.StatusText ?? "Input TCP: not started")
+                + EmulatorRouteHint;
             ResetVideoPipelineMetrics();
             mainViewModel.VideoStatus = WaitingVideoStatus;
 
@@ -282,11 +267,10 @@ public partial class App : System.Windows.Application
                             renderStats.LastUploadFailureCode
                         );
                     }
-                    if (_webRtcPeerConnectionService is not null)
+                    if (_windowsInputTcpServerService is not null)
                     {
                         mainViewModel.BridgeStatus =
-                            _webRtcPeerConnectionService.GetInputChannelStatusText()
-                            + EmulatorRouteHint;
+                            _windowsInputTcpServerService.StatusText + EmulatorRouteHint;
                     }
                     if (_windowCaptureService is not null)
                     {
@@ -317,45 +301,32 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private static int ResolveValidWebRtcSignalingPort(int value)
+    private static int ResolveValidWindowsInputTcpPort(int value)
     {
         if (value is >= 1 and <= 65535)
         {
             return value;
         }
 
-        return DefaultWebRtcSignalingPort;
+        return DefaultWindowsInputTcpPort;
     }
 
-    private void InitializeWebRtcSignalingServer(
+    private void InitializeWindowsInputTcpServer(
         AppLogger logger,
-        int signalingPort,
+        int inputTcpPort,
         MainViewModel mainViewModel
     )
     {
-        var sanitizedPort = ResolveValidWebRtcSignalingPort(signalingPort);
-        if (sanitizedPort != signalingPort)
+        var sanitizedPort = ResolveValidWindowsInputTcpPort(inputTcpPort);
+        if (sanitizedPort != inputTcpPort)
         {
-            mainViewModel.SetSignalingPortForDisplay(sanitizedPort);
+            mainViewModel.SetInputTcpPortForDisplay(sanitizedPort);
         }
 
-        _webRtcSignalingTcpServerService?.Dispose();
-        _webRtcSignalingTcpServerService = new WebRtcSignalingTcpServerService(
-            logger,
-            sanitizedPort
-        );
-        _webRtcSignalingTcpServerService.MessageReceived += message =>
-        {
-            logger.Info($"WebRTC signaling rx: type={message.Type}");
-            if (_webRtcPeerConnectionService is null)
-            {
-                return;
-            }
-
-            _ = _webRtcPeerConnectionService.HandleSignalingMessageAsync(message);
-        };
-        _webRtcSignalingTcpServerService.Start();
-        logger.Info(_webRtcSignalingTcpServerService.StatusText);
+        _windowsInputTcpServerService?.Dispose();
+        _windowsInputTcpServerService = new WindowsInputTcpServerService(logger, sanitizedPort);
+        _windowsInputTcpServerService.Start();
+        logger.Info(_windowsInputTcpServerService.StatusText);
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -365,10 +336,8 @@ public partial class App : System.Windows.Application
         _uiTimer = null;
         _openXrControllerInputService?.Dispose();
         _openXrControllerInputService = null;
-        _webRtcSignalingTcpServerService?.Dispose();
-        _webRtcSignalingTcpServerService = null;
-        _webRtcPeerConnectionService?.Dispose();
-        _webRtcPeerConnectionService = null;
+        _windowsInputTcpServerService?.Dispose();
+        _windowsInputTcpServerService = null;
         _windowCaptureService?.Dispose();
         _windowCaptureService = null;
         base.OnExit(e);

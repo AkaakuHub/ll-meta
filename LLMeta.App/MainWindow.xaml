@@ -38,17 +38,17 @@
           IsChecked="{Binding IsKeyboardDebugMode}"
           Margin="0,0,0,8"
         />
-        <TextBlock Text="WebRTC signaling TCP port" Foreground="Gray" Margin="0,0,0,4" />
+        <TextBlock Text="Windows input TCP port" Foreground="Gray" Margin="0,0,0,4" />
         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
           <TextBox
             Width="120"
-            Text="{Binding WebRtcSignalingPort, UpdateSourceTrigger=PropertyChanged}"
+            Text="{Binding WindowsInputTcpPort, UpdateSourceTrigger=PropertyChanged}"
             Margin="0,0,8,0"
           />
           <Button
-            Content="Save Signaling Port"
+            Content="Save Input TCP Port"
             Width="170"
-            Command="{Binding ApplySignalingPortCommand}"
+            Command="{Binding ApplyInputTcpPortCommand}"
           />
         </StackPanel>
         <Button
