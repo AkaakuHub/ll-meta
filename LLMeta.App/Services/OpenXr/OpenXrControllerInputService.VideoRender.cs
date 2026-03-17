@@ -17,7 +17,9 @@ public sealed unsafe partial class OpenXrControllerInputService
     );
     private const int StereoViewCount = 2;
     private const long DxgiFormatB8G8R8A8Unorm = 87;
+    private const long DxgiFormatB8G8R8A8UnormSrgb = 91;
     private const long DxgiFormatR8G8B8A8Unorm = 28;
+    private const long DxgiFormatR8G8B8A8UnormSrgb = 29;
     private const long DxgiFormatNv12 = 103;
     private const int DxgiErrorNotFound = unchecked((int)0x887A0002);
 
@@ -190,20 +192,8 @@ public sealed unsafe partial class OpenXrControllerInputService
             }
         }
 
-        var bgraSupported = false;
-        var rgbaSupported = false;
-        foreach (var format in formats)
-        {
-            if (format == DxgiFormatB8G8R8A8Unorm)
-            {
-                bgraSupported = true;
-            }
-
-            if (format == DxgiFormatR8G8B8A8Unorm)
-            {
-                rgbaSupported = true;
-            }
-        }
+        var bgraSupported = formats.Any(static format => IsBgraFamilyFormat(format));
+        var rgbaSupported = formats.Any(static format => IsRgbaFamilyFormat(format));
 
         _swapchainFormatSummary =
             "available="
@@ -211,11 +201,11 @@ public sealed unsafe partial class OpenXrControllerInputService
         lock (_videoFrameLock)
         {
             _availableSwapchainFormatLabels = ["Auto"];
-            if (formats.Contains(DxgiFormatR8G8B8A8Unorm))
+            if (formats.Any(static format => IsRgbaFamilyFormat(format)))
             {
                 _availableSwapchainFormatLabels.Add("RGBA8");
             }
-            if (formats.Contains(DxgiFormatB8G8R8A8Unorm))
+            if (formats.Any(static format => IsBgraFamilyFormat(format)))
             {
                 _availableSwapchainFormatLabels.Add("BGRA8");
             }
@@ -416,9 +406,19 @@ public sealed unsafe partial class OpenXrControllerInputService
 
     private static string DescribeSwapchainFormat(long format)
     {
+        if (format == DxgiFormatB8G8R8A8UnormSrgb)
+        {
+            return "B8G8R8A8_UNORM_SRGB";
+        }
+
         if (format == DxgiFormatB8G8R8A8Unorm)
         {
             return "B8G8R8A8_UNORM";
+        }
+
+        if (format == DxgiFormatR8G8B8A8UnormSrgb)
+        {
+            return "R8G8B8A8_UNORM_SRGB";
         }
 
         if (format == DxgiFormatR8G8B8A8Unorm)
@@ -441,16 +441,10 @@ public sealed unsafe partial class OpenXrControllerInputService
     )
     {
         selectedSwapchainFormat = 0;
-        var candidateFormats = new List<long>();
-        if (availableFormats.Contains(DxgiFormatB8G8R8A8Unorm))
-        {
-            candidateFormats.Add(DxgiFormatB8G8R8A8Unorm);
-        }
-
-        if (availableFormats.Contains(DxgiFormatR8G8B8A8Unorm))
-        {
-            candidateFormats.Add(DxgiFormatR8G8B8A8Unorm);
-        }
+        var candidateFormats = availableFormats
+            .Where(static format => IsSupportedColorSwapchainFormat(format))
+            .Distinct()
+            .ToList();
 
         if (candidateFormats.Count == 0)
         {
@@ -487,10 +481,9 @@ public sealed unsafe partial class OpenXrControllerInputService
 
             foreach (var candidateFormat in candidateFormats)
             {
-                var outputSupported =
-                    candidateFormat == DxgiFormatR8G8B8A8Unorm
-                        ? rgbaOutputSupported
-                        : bgraOutputSupported;
+                var outputSupported = IsRgbaFamilyFormat(candidateFormat)
+                    ? rgbaOutputSupported
+                    : bgraOutputSupported;
                 if (!outputSupported)
                 {
                     continue;
@@ -615,15 +608,15 @@ public sealed unsafe partial class OpenXrControllerInputService
         var requested = NormalizePreferredSwapchainFormat(requestedSwapchainFormat);
         if (requested.Equals("RGBA8", StringComparison.OrdinalIgnoreCase))
         {
-            return formats.Where(static format => format == DxgiFormatR8G8B8A8Unorm).ToList();
+            return formats.Where(static format => IsRgbaFamilyFormat(format)).ToList();
         }
 
         if (requested.Equals("BGRA8", StringComparison.OrdinalIgnoreCase))
         {
-            return formats.Where(static format => format == DxgiFormatB8G8R8A8Unorm).ToList();
+            return formats.Where(static format => IsBgraFamilyFormat(format)).ToList();
         }
 
-        return formats;
+        return formats.OrderBy(static format => GetAutoSwapchainFormatPriority(format)).ToList();
     }
 
     private static string NormalizePreferredSwapchainFormat(string? preferredSwapchainFormat)
@@ -636,6 +629,7 @@ public sealed unsafe partial class OpenXrControllerInputService
         var normalized = preferredSwapchainFormat.Trim();
         if (
             normalized.Equals("R8G8B8A8_UNORM", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("R8G8B8A8_UNORM_SRGB", StringComparison.OrdinalIgnoreCase)
             || normalized.Equals("RGBA8", StringComparison.OrdinalIgnoreCase)
         )
         {
@@ -644,6 +638,7 @@ public sealed unsafe partial class OpenXrControllerInputService
 
         if (
             normalized.Equals("B8G8R8A8_UNORM", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("B8G8R8A8_UNORM_SRGB", StringComparison.OrdinalIgnoreCase)
             || normalized.Equals("BGRA8", StringComparison.OrdinalIgnoreCase)
         )
         {
@@ -655,17 +650,57 @@ public sealed unsafe partial class OpenXrControllerInputService
 
     private static string ToUiSwapchainLabel(long format)
     {
-        if (format == DxgiFormatR8G8B8A8Unorm)
+        if (IsRgbaFamilyFormat(format))
         {
             return "RGBA8";
         }
 
-        if (format == DxgiFormatB8G8R8A8Unorm)
+        if (IsBgraFamilyFormat(format))
         {
             return "BGRA8";
         }
 
         return DescribeSwapchainFormat(format);
+    }
+
+    private static bool IsSupportedColorSwapchainFormat(long format)
+    {
+        return IsBgraFamilyFormat(format) || IsRgbaFamilyFormat(format);
+    }
+
+    private static bool IsBgraFamilyFormat(long format)
+    {
+        return format == DxgiFormatB8G8R8A8Unorm || format == DxgiFormatB8G8R8A8UnormSrgb;
+    }
+
+    private static bool IsRgbaFamilyFormat(long format)
+    {
+        return format == DxgiFormatR8G8B8A8Unorm || format == DxgiFormatR8G8B8A8UnormSrgb;
+    }
+
+    private static int GetAutoSwapchainFormatPriority(long format)
+    {
+        if (format == DxgiFormatB8G8R8A8UnormSrgb)
+        {
+            return 0;
+        }
+
+        if (format == DxgiFormatB8G8R8A8Unorm)
+        {
+            return 1;
+        }
+
+        if (format == DxgiFormatR8G8B8A8UnormSrgb)
+        {
+            return 2;
+        }
+
+        if (format == DxgiFormatR8G8B8A8Unorm)
+        {
+            return 3;
+        }
+
+        return int.MaxValue;
     }
 
     private static string NormalizePreferredGraphicsAdapter(string? preferredGraphicsAdapter)

@@ -336,7 +336,7 @@ public sealed unsafe partial class OpenXrControllerInputService
 
         var copySourceTexture = sourceTexture;
         var copySourceSubresourceIndex = sourceSubresourceIndex;
-        if (sourceTextureDesc.Format != targetTextureDesc.Format)
+        if (!CanCopyWithoutFormatConversion(sourceTextureDesc.Format, targetTextureDesc.Format))
         {
             if (
                 !TryConvertSourceTextureToSwapchainFormat(
@@ -1581,6 +1581,32 @@ public sealed unsafe partial class OpenXrControllerInputService
         }
 
         return format;
+    }
+
+    private static bool CanCopyWithoutFormatConversion(Format sourceFormat, Format targetFormat)
+    {
+        if (sourceFormat == targetFormat)
+        {
+            return true;
+        }
+
+        return AreCompatibleCopyFormats(sourceFormat, targetFormat);
+    }
+
+    private static bool AreCompatibleCopyFormats(Format left, Format right)
+    {
+        return (IsRgbaCopyCompatibleFormat(left) && IsRgbaCopyCompatibleFormat(right))
+            || (IsBgraCopyCompatibleFormat(left) && IsBgraCopyCompatibleFormat(right));
+    }
+
+    private static bool IsRgbaCopyCompatibleFormat(Format format)
+    {
+        return format == Format.FormatR8G8B8A8Unorm || (int)format == 29;
+    }
+
+    private static bool IsBgraCopyCompatibleFormat(Format format)
+    {
+        return format == Format.FormatB8G8R8A8Unorm || (int)format == 91;
     }
 
     private void LogVideoProcessorFailureDetail(string detail)
