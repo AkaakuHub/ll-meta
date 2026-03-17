@@ -134,10 +134,12 @@ public sealed class WindowCaptureService : IDisposable
             );
             _framePool.FrameArrived += OnFrameArrived;
             _captureSession = _framePool.CreateCaptureSession(item);
+            _captureSession.MinUpdateInterval = TimeSpan.Zero;
+            _captureSession.DirtyRegionMode = GraphicsCaptureDirtyRegionMode.ReportAndRender;
             _captureSession.StartCapture();
             _statusText = $"Capture: {item.DisplayName} {item.Size.Width}x{item.Size.Height}";
             _logger.Info(
-                $"Window capture started: target={item.DisplayName} size={item.Size.Width}x{item.Size.Height}"
+                $"Window capture started: target={item.DisplayName} size={item.Size.Width}x{item.Size.Height} minUpdateIntervalMs={_captureSession.MinUpdateInterval.TotalMilliseconds:0.###} dirtyRegionMode={_captureSession.DirtyRegionMode}"
             );
         }
     }
