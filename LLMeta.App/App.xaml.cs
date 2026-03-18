@@ -85,10 +85,7 @@ public partial class App : System.Windows.Application
             var settingsStore = new SettingsStore(logger);
             var settings = settingsStore.Load();
             var captureTargetRestoreService = new CaptureTargetRestoreService(logger);
-            var mainViewModel = new MainViewModel(settings, settingsStore, logger);
-            mainViewModel.SelectedSwapchainFormatOption = settings.PreferredSwapchainFormat;
-            mainViewModel.SelectedGraphicsAdapterOption = settings.PreferredGraphicsAdapter;
-            mainViewModel.SelectedGraphicsBackendOption = settings.PreferredGraphicsBackend;
+            var mainViewModel = new MainViewModel(settings, logger);
             var inputTcpPort = ResolveValidWindowsInputTcpPort(settings.WindowsInputTcpPort);
             if (settings.WindowsInputTcpPort != inputTcpPort)
             {
@@ -134,38 +131,6 @@ public partial class App : System.Windows.Application
                 mainViewModel.SetInputTcpPortForDisplay(port);
                 InitializeWindowsInputTcpServer(logger, port, mainViewModel);
                 mainViewModel.StatusMessage = $"Windows input TCP port applied: {port}";
-            };
-            mainViewModel.VideoRenderSettingsApplyRequested += (
-                preferredSwapchainFormat,
-                preferredGraphicsAdapter,
-                preferredGraphicsBackend
-            ) =>
-            {
-                settings.PreferredSwapchainFormat = preferredSwapchainFormat;
-                settings.PreferredGraphicsAdapter = preferredGraphicsAdapter;
-                settings.PreferredGraphicsBackend = preferredGraphicsBackend;
-                settingsStore.Save(settings);
-                StopRealtimeLoops();
-                var reinitializeState = ReinitializeOpenXr(
-                    logger,
-                    settings.PreferredSwapchainFormat,
-                    settings.PreferredGraphicsAdapter,
-                    settings.PreferredGraphicsBackend
-                );
-                lock (_runtimeStateLock)
-                {
-                    _latestOpenXrState = reinitializeState;
-                    _latestInputSource = reinitializeState.IsInitialized
-                        ? "Input source: OpenXR"
-                        : "Input source: unavailable";
-                }
-                _windowCaptureService?.SetD3D11DevicePointer(
-                    _openXrControllerInputService?.GetD3D11DevicePointer() ?? IntPtr.Zero
-                );
-                StartRealtimeLoops(logger);
-                mainViewModel.StatusMessage = reinitializeState.IsInitialized
-                    ? $"Video render settings applied: {settings.PreferredSwapchainFormat}, {settings.PreferredGraphicsBackend}"
-                    : "Video render settings apply failed.";
             };
             mainViewModel.CaptureTargetSelectionRequested += async () =>
             {
