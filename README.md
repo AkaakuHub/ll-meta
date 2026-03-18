@@ -1,65 +1,57 @@
-# LLMeta Desktop Template
+[![Platform](https://img.shields.io/badge/platform-Windows-blue)](https://github.com/AkaakuHub/refined-line)
 
-A clean Windows desktop application template with system tray resident functionality.
+[日本語READMEはこちら](./docs/ja/README.md)
 
-## Features
-- System tray icon with context menu (background resident)
-- WPF main window
-- MVVM pattern implementation
-- Settings persistence (JSON)
-- Windows startup integration
-- Logging functionality
-- Velopack update support
+# LLMeta
 
-## Requirements
-- Windows 11
-- .NET SDK 10
+The client for Linkura VR
 
-## Development
-```
-dotnet run --project .\LLMeta.App\
-```
+# Disclaimer
 
-## Project Structure
-- `App.xaml.cs` - Application entry point with tray icon setup
-- `MainWindow.xaml` - Main UI window
-- `ViewModels/` - MVVM view models
-- `Models/` - Data models (AppSettings)
-- `Stores/` - Data persistence (SettingsStore)
-- `Services/` - Business logic services
-- `Utils/` - Utility classes (Logger, Paths, Commands)
+All code and resources included in this repository are published solely for developers' learning and reference purposes. The author makes no warranties of any kind regarding the accuracy, completeness, or fitness of this code or these resources for any particular purpose. The author shall bear no responsibility whatsoever for any direct or indirect consequences, damages, losses, or legal liabilities arising from the use of this code. All risks associated with its use are to be borne solely by the user.
 
-## Formatter / Linter / Hooks
+# Architecture Diagram
+```mermaid
+flowchart LR
+  subgraph W["Windows"]
+    direction LR
 
-This project uses [Husky.Net](https://github.com/alirezanet/Husky.Net) for git hooks.
+    subgraph E["Android Emulator"]
+      direction TB
+      LK["Linkura"]
+    end
 
-### Setup
+    subgraph L["LLMeta"]
+      direction TB
+      BI["Bypass Input"]
+      SC["Screen Capture"]
+    end
 
-After restoring NuGet packages, husky will be automatically configured:
+    BI <--> |"TCP transport"| LK
+    BI -.-> |"Input forwarding"| LK
+    SC --> |"Capture Emulator SBS"| E
+  end
 
-```
-dotnet restore
-```
+  subgraph Q["Meta Quest 3"]
+    direction TB
+    QI["Input"]
+    QO["Output"]
+  end
 
-Or manually install husky:
-
-```
-dotnet husky install
+  QI --> |"Controller / Head Tracking"| BI
+  SC --> |"OpenXR Render Path"| QO
 ```
 
-### Manual Commands
+# Contribution
 
-Format code:
-```
-dotnet csharpier format .
-```
+This project is currently in the alpha stage, so contributions are welcome!
 
-Lint (build with analyzers):
-```
-dotnet build .\LLMeta.App\LLMeta.App.csproj
-```
+# Development Environment
 
-Run hooks manually:
-```
-dotnet husky run
-```
+- Windows 11 26H2
+- Visual Studio Code
+- Meta Quest 3
+
+# Special Thanks
+
+- [linkura-localify](https://github.com/ChocoLZS/linkura-localify)
