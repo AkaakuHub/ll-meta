@@ -1,114 +1,408 @@
 <Window
   x:Class="OpenKikaiSan.App.MainWindow"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  mc:Ignorable="d"
   Title="OpenKikaiSan"
-  Height="520"
-  Width="600"
-  MinHeight="300"
-  MinWidth="400"
+  Height="860"
+  Width="1380"
+  MinHeight="720"
+  MinWidth="1120"
   WindowStartupLocation="CenterScreen"
+  Background="#EEEEEE"
 >
-  <Grid Margin="16">
+  <Window.Resources>
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#EEEEEE" />
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#EEEEEE" />
+    <SolidColorBrush x:Key="PanelBackgroundAltBrush" Color="#EEEEEE" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#68BE8D" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#8BDD5B" />
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#000000" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#000000" />
+    <SolidColorBrush x:Key="StrokeBrush" Color="#68BE8D" />
+    <SolidColorBrush x:Key="GlowBrush" Color="#68BE8D" />
+
+    <Style x:Key="SectionCardStyle" TargetType="Border">
+      <Setter Property="Background" Value="{StaticResource PanelBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource StrokeBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Padding" Value="22" />
+      <Setter Property="Margin" Value="0,0,0,18" />
+    </Style>
+
+    <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="19" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+    </Style>
+
+    <Style x:Key="SectionBodyStyle" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+
+    <Style x:Key="StatusCardStyle" TargetType="Border">
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Padding" Value="14,12" />
+      <Setter Property="Margin" Value="0,0,0,12" />
+      <Setter Property="Background" Value="{StaticResource PanelBackgroundAltBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource StrokeBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style x:Key="MetricTextStyle" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0" />
+    </Style>
+
+    <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+      <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+      <Setter Property="Foreground" Value="#000000" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Height" Value="42" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border
+              x:Name="RootBorder"
+              Background="{TemplateBinding Background}"
+              BorderBrush="{TemplateBinding BorderBrush}"
+              BorderThickness="{TemplateBinding BorderThickness}"
+              SnapsToDevicePixels="True"
+            >
+              <ContentPresenter
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Margin="{TemplateBinding Padding}"
+                RecognizesAccessKey="True"
+              />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter
+                  TargetName="RootBorder"
+                  Property="Background"
+                  Value="{StaticResource AccentHoverBrush}"
+                />
+                <Setter
+                  TargetName="RootBorder"
+                  Property="BorderBrush"
+                  Value="{StaticResource AccentHoverBrush}"
+                />
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter
+                  TargetName="RootBorder"
+                  Property="Background"
+                  Value="{StaticResource AccentHoverBrush}"
+                />
+                <Setter
+                  TargetName="RootBorder"
+                  Property="BorderBrush"
+                  Value="{StaticResource AccentHoverBrush}"
+                />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="RootBorder" Property="Opacity" Value="0.55" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="SecondaryButtonStyle" TargetType="Button">
+      <Setter Property="Background" Value="{StaticResource PanelBackgroundAltBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource StrokeBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Height" Value="42" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border
+              x:Name="RootBorder"
+              Background="{TemplateBinding Background}"
+              BorderBrush="{TemplateBinding BorderBrush}"
+              BorderThickness="{TemplateBinding BorderThickness}"
+              SnapsToDevicePixels="True"
+            >
+              <ContentPresenter
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Margin="{TemplateBinding Padding}"
+                RecognizesAccessKey="True"
+              />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter
+                  TargetName="RootBorder"
+                  Property="Background"
+                  Value="{StaticResource AccentHoverBrush}"
+                />
+                <Setter
+                  TargetName="RootBorder"
+                  Property="BorderBrush"
+                  Value="{StaticResource AccentHoverBrush}"
+                />
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter
+                  TargetName="RootBorder"
+                  Property="Background"
+                  Value="{StaticResource AccentHoverBrush}"
+                />
+                <Setter
+                  TargetName="RootBorder"
+                  Property="BorderBrush"
+                  Value="{StaticResource AccentHoverBrush}"
+                />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="RootBorder" Property="Opacity" Value="0.55" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
+  <Grid Background="{StaticResource AppBackgroundBrush}">
     <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
-    <TextBlock
-      Grid.Row="0"
-      Text="OpenKikaiSan Desktop Application Template"
-      FontSize="18"
-      FontWeight="SemiBold"
-      Margin="0,0,0,16"
-    />
-
     <ScrollViewer
-      Grid.Row="1"
+      Grid.Row="0"
       VerticalScrollBarVisibility="Auto"
       HorizontalScrollBarVisibility="Disabled"
       Margin="0,0,0,16"
     >
-      <StackPanel>
-        <TextBlock Text="Settings:" FontWeight="SemiBold" Margin="0,0,0,8" />
-        <TextBlock Text="OpenXR input monitor mode" Foreground="Gray" Margin="0,0,0,4" />
-        <CheckBox
-          Content="Enable keyboard debug input"
-          IsChecked="{Binding IsKeyboardDebugMode}"
-          Margin="0,0,0,8"
-        />
-        <TextBlock Text="Windows input TCP port" Foreground="Gray" Margin="0,0,0,4" />
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-          <TextBox
-            Width="120"
-            Text="{Binding WindowsInputTcpPort, UpdateSourceTrigger=PropertyChanged}"
-            Margin="0,0,8,0"
-          />
-          <Button
-            Content="Save Input TCP Port"
-            Width="170"
-            Command="{Binding ApplyInputTcpPortCommand}"
-          />
-        </StackPanel>
-        <Button
-          Content="Reinitialize OpenXR"
-          Width="180"
-          Command="{Binding ReinitializeOpenXrCommand}"
-          Margin="0,0,0,8"
-        />
-        <TextBlock Text="Capture target" Foreground="Gray" Margin="0,0,0,4" />
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-          <Button
-            Content="Select Window / Monitor"
-            Width="180"
-            Command="{Binding SelectCaptureTargetCommand}"
-            Margin="0,0,8,0"
-          />
-          <TextBlock
-            VerticalAlignment="Center"
-            Text="{Binding CaptureStatus}"
-            TextWrapping="Wrap"
-          />
-        </StackPanel>
-        <TextBlock
-          Foreground="Gray"
-          TextWrapping="Wrap"
-          Text="Left stick: WASD | Right stick: IJKL | Buttons: 1(X) 2(Y) 3(A) 4(B) | Trigger/Grip: Q E U O | Stick click: LeftShift RightShift | HMD yaw/pitch/roll: Arrow + PageUp/PageDown | HMD position: F/H(X) T/G(Y) R/V(Z)"
-        />
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="430" />
+          <ColumnDefinition Width="24" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
-        <TextBlock Text="OpenXR Controller Input:" FontWeight="SemiBold" Margin="0,16,0,8" />
-        <Border BorderBrush="#DDDDDD" BorderThickness="1" Padding="8">
-          <StackPanel>
-            <TextBlock Text="{Binding OpenXrInputStatus}" Margin="0,0,0,8" />
-            <TextBlock Text="{Binding ActiveInputSource}" Margin="0,0,0,8" />
-            <TextBlock Text="{Binding BridgeStatus}" Margin="0,0,0,8" />
-            <TextBlock Text="{Binding VideoStatus}" Margin="0,0,0,8" TextWrapping="Wrap" />
-            <TextBlock
-              Text="{Binding VideoRenderConfigStatus}"
-              Margin="0,0,0,8"
-              TextWrapping="Wrap"
-            />
-            <TextBlock
-              Text="{Binding VideoRenderErrorStatus}"
-              Margin="0,0,0,8"
-              TextWrapping="Wrap"
-              Foreground="OrangeRed"
-            />
-            <TextBlock Text="{Binding HmdPoseState}" TextWrapping="Wrap" Margin="0,0,0,8" />
-            <TextBlock Text="{Binding LeftControllerState}" Margin="0,0,0,4" />
-            <TextBlock Text="{Binding RightControllerState}" TextWrapping="Wrap" />
-          </StackPanel>
-        </Border>
-      </StackPanel>
+        <StackPanel Grid.Column="0">
+          <Border Style="{StaticResource SectionCardStyle}">
+            <StackPanel>
+              <Border Style="{StaticResource StatusCardStyle}">
+                <TextBlock
+                  Text="{Binding StatusMessage}"
+                  Style="{StaticResource MetricTextStyle}"
+                />
+              </Border>
+
+              <CheckBox
+                Content="Enable Keyboard Debug Input"
+                IsChecked="{Binding IsKeyboardDebugMode}"
+                Margin="0,0,0,18"
+                Foreground="{StaticResource TextPrimaryBrush}"
+              />
+
+              <Grid Margin="0,0,0,18">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="150" />
+                  <ColumnDefinition Width="12" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <TextBox
+                  Grid.Column="0"
+                  Text="{Binding WindowsInputTcpPort, UpdateSourceTrigger=PropertyChanged}"
+                  VerticalContentAlignment="Center"
+                  Height="38"
+                  Background="{StaticResource PanelBackgroundAltBrush}"
+                  Foreground="{StaticResource TextPrimaryBrush}"
+                  BorderBrush="{StaticResource StrokeBrush}"
+                />
+
+                <Button
+                  Grid.Column="2"
+                  Content="Save Input TCP Port"
+                  Command="{Binding ApplyInputTcpPortCommand}"
+                  Height="38"
+                  Style="{StaticResource PrimaryButtonStyle}"
+                />
+              </Grid>
+
+              <Grid Margin="0,0,0,18">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="12" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Button
+                  Grid.Column="0"
+                  Content="Reinitialize OpenXR"
+                  Command="{Binding ReinitializeOpenXrCommand}"
+                  Style="{StaticResource PrimaryButtonStyle}"
+                />
+
+                <Button
+                  Grid.Column="2"
+                  Content="Select Window / Monitor"
+                  Command="{Binding SelectCaptureTargetCommand}"
+                  Style="{StaticResource PrimaryButtonStyle}"
+                />
+              </Grid>
+
+              <Border Style="{StaticResource StatusCardStyle}" Margin="0">
+                <StackPanel>
+                  <TextBlock
+                    Style="{StaticResource SectionBodyStyle}"
+                    Margin="0"
+                    Text="Left stick: WASD | Right stick: IJKL | Buttons: 1(X) 2(Y) 3(A) 4(B) | Trigger/Grip: Q E U O | Stick click: LeftShift RightShift | HMD yaw/pitch/roll: Arrow + PageUp/PageDown | HMD position: F/H(X) T/G(Y) R/V(Z)"
+                  />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <StackPanel Grid.Column="2">
+          <Border Style="{StaticResource SectionCardStyle}">
+            <StackPanel>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="12" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource StatusCardStyle}">
+                  <TextBlock
+                    Text="{Binding OpenXrInputStatus}"
+                    Style="{StaticResource MetricTextStyle}"
+                  />
+                </Border>
+                <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource StatusCardStyle}">
+                  <TextBlock
+                    Text="{Binding ActiveInputSource}"
+                    Style="{StaticResource MetricTextStyle}"
+                  />
+                </Border>
+                <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource StatusCardStyle}">
+                  <TextBlock
+                    Text="{Binding BridgeStatus}"
+                    Style="{StaticResource MetricTextStyle}"
+                  />
+                </Border>
+                <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource StatusCardStyle}">
+                  <TextBlock
+                    Text="{Binding VideoStatus}"
+                    Style="{StaticResource MetricTextStyle}"
+                  />
+                </Border>
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource SectionCardStyle}">
+            <StackPanel>
+              <Border Style="{StaticResource StatusCardStyle}">
+                <TextBlock
+                  Text="{Binding CaptureStatus}"
+                  Style="{StaticResource MetricTextStyle}"
+                />
+              </Border>
+
+              <Border Style="{StaticResource StatusCardStyle}">
+                <TextBlock
+                  Text="{Binding VideoRenderConfigStatus}"
+                  Style="{StaticResource MetricTextStyle}"
+                />
+              </Border>
+
+              <Border
+                CornerRadius="0"
+                Padding="14"
+                Background="#EEEEEE"
+                BorderBrush="{StaticResource StrokeBrush}"
+                BorderThickness="1"
+                Margin="0"
+              >
+                <TextBlock
+                  Text="{Binding VideoRenderErrorStatus}"
+                  Foreground="{StaticResource AccentBrush}"
+                  TextWrapping="Wrap"
+                />
+              </Border>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource SectionCardStyle}" Margin="0">
+            <StackPanel>
+              <Border Style="{StaticResource StatusCardStyle}">
+                <TextBlock Text="{Binding HmdPoseState}" Style="{StaticResource MetricTextStyle}" />
+              </Border>
+
+              <Border Style="{StaticResource StatusCardStyle}">
+                <TextBlock
+                  Text="{Binding LeftControllerState}"
+                  Style="{StaticResource MetricTextStyle}"
+                />
+              </Border>
+
+              <Border Style="{StaticResource StatusCardStyle}" Margin="0">
+                <TextBlock
+                  Text="{Binding RightControllerState}"
+                  Style="{StaticResource MetricTextStyle}"
+                />
+              </Border>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Grid>
     </ScrollViewer>
 
-    <TextBlock
-      Grid.Row="2"
-      HorizontalAlignment="Right"
-      VerticalAlignment="Center"
-      Text="{Binding StatusMessage}"
-      Foreground="Gray"
-    />
+    <Border
+      Grid.Row="1"
+      Background="{StaticResource PanelBackgroundAltBrush}"
+      BorderBrush="{StaticResource StrokeBrush}"
+      BorderThickness="1"
+      CornerRadius="0"
+      Padding="16,10"
+    >
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock
+          Text="OpenKikaiSan"
+          Foreground="{StaticResource TextSecondaryBrush}"
+          VerticalAlignment="Center"
+        />
+
+        <TextBlock
+          Grid.Column="1"
+          HorizontalAlignment="Right"
+          VerticalAlignment="Center"
+          Text="{Binding StatusMessage}"
+          Foreground="{StaticResource TextSecondaryBrush}"
+        />
+      </Grid>
+    </Border>
   </Grid>
 </Window>
