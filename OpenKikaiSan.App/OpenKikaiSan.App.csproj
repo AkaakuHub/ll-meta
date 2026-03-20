@@ -26,6 +26,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <Resource Include="Assets\icon.ico" />
+    </ItemGroup>
+
+    <ItemGroup>
         <Content Include="$(NuGetPackageRoot)openxr.loader\1.0.10.2\native\x64\release\bin\openxr_loader.dll">
             <Link>openxr_loader.dll</Link>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
