@@ -225,7 +225,7 @@ public partial class App : System.Windows.Application
 
             if (_uiTimer is null)
             {
-                _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+                _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
                 _uiTimer.Tick += (_, _) =>
                 {
                     _isKeyboardDebugMode = mainViewModel.IsKeyboardDebugMode;

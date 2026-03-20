@@ -23,6 +23,7 @@ public sealed class MainViewModel : ViewModelBase
     private string _videoRenderErrorStatus = "Video render error: none";
     private string _windowsInputTcpPort = string.Empty;
     private string _captureStatus = "Capture: not selected";
+    private OpenXrControllerState _currentOpenXrState;
 
     public MainViewModel(AppSettings settings, AppLogger logger)
     {
@@ -120,6 +121,12 @@ public sealed class MainViewModel : ViewModelBase
         set => SetProperty(ref _captureStatus, value);
     }
 
+    public OpenXrControllerState CurrentOpenXrState
+    {
+        get => _currentOpenXrState;
+        private set => SetProperty(ref _currentOpenXrState, value);
+    }
+
     public void UpdateVideoRenderConfig(OpenXrVideoRenderConfigState config, int lastFailureCode)
     {
         VideoRenderConfigStatus =
@@ -133,6 +140,7 @@ public sealed class MainViewModel : ViewModelBase
 
     public void UpdateOpenXrControllerState(OpenXrControllerState state)
     {
+        CurrentOpenXrState = state;
         OpenXrInputStatus = $"OpenXR: {state.Status}";
         HmdPoseState =
             $"HMD Pos({state.HeadPose.PositionX:0.000}, {state.HeadPose.PositionY:0.000}, {state.HeadPose.PositionZ:0.000}) "

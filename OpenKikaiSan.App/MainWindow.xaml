@@ -3,6 +3,7 @@
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
   xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:controls="clr-namespace:OpenKikaiSan.App.Controls"
   xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   mc:Ignorable="d"
@@ -287,23 +288,40 @@
                 Style="{StaticResource BodyTextStyle}"
               />
 
-              <Border Style="{StaticResource InfoPanelStyle}">
-                <TextBlock Text="{Binding HmdPoseState}" Style="{StaticResource MetricTextStyle}" />
-              </Border>
+              <TabControl Margin="0,16,0,0">
+                <TabItem Header="3D View">
+                  <controls:OpenXrSceneView
+                    Height="360"
+                    State="{Binding CurrentOpenXrState}"
+                    StatusText="{Binding OpenXrInputStatus}"
+                  />
+                </TabItem>
 
-              <Border Style="{StaticResource InfoPanelStyle}">
-                <TextBlock
-                  Text="{Binding LeftControllerState}"
-                  Style="{StaticResource MetricTextStyle}"
-                />
-              </Border>
+                <TabItem Header="Text">
+                  <StackPanel Margin="12">
+                    <Border Style="{StaticResource InfoPanelStyle}">
+                      <TextBlock
+                        Text="{Binding HmdPoseState}"
+                        Style="{StaticResource MetricTextStyle}"
+                      />
+                    </Border>
 
-              <Border Style="{StaticResource InfoPanelStyle}" Margin="0">
-                <TextBlock
-                  Text="{Binding RightControllerState}"
-                  Style="{StaticResource MetricTextStyle}"
-                />
-              </Border>
+                    <Border Style="{StaticResource InfoPanelStyle}">
+                      <TextBlock
+                        Text="{Binding LeftControllerState}"
+                        Style="{StaticResource MetricTextStyle}"
+                      />
+                    </Border>
+
+                    <Border Style="{StaticResource InfoPanelStyle}" Margin="0">
+                      <TextBlock
+                        Text="{Binding RightControllerState}"
+                        Style="{StaticResource MetricTextStyle}"
+                      />
+                    </Border>
+                  </StackPanel>
+                </TabItem>
+              </TabControl>
             </StackPanel>
           </ui:Card>
         </StackPanel>
