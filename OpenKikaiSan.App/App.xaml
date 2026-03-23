@@ -11,6 +11,7 @@
         <ui:ThemesDictionary Theme="Light" />
         <ui:ControlsDictionary />
       </ResourceDictionary.MergedDictionaries>
+      <SolidColorBrush x:Key="SystemFillColorAttentionBrush" Color="#F8A511" />
     </ResourceDictionary>
   </Application.Resources>
 </Application>

@@ -69,6 +69,51 @@
       <Setter Property="Padding" Value="14,12" />
       <Setter Property="Margin" Value="0,0,0,12" />
     </Style>
+
+    <Style
+      x:Key="CompactInfoPanelStyle"
+      TargetType="Border"
+      BasedOn="{StaticResource InfoPanelStyle}"
+    >
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+
+    <Style x:Key="CompactCardStyle" TargetType="ui:Card" BasedOn="{StaticResource CardStyle}">
+      <Setter Property="Padding" Value="20" />
+      <Setter Property="Margin" Value="0,0,0,16" />
+    </Style>
+
+    <Style x:Key="ControlCardStyle" TargetType="ui:Card" BasedOn="{StaticResource CardStyle}">
+      <Setter Property="Padding" Value="20" />
+      <Setter Property="Margin" Value="0,0,0,16" />
+    </Style>
+
+    <Style x:Key="ControlPanelStyle" TargetType="Border" BasedOn="{StaticResource InfoPanelStyle}">
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+
+    <Style x:Key="ControlLabelStyle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+
+    <Style x:Key="MappingGroupTitleStyle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+      <Setter Property="Margin" Value="0,0,0,4" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="MappingTextStyle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
   </Window.Resources>
 
   <Grid Background="Transparent">
@@ -103,17 +148,12 @@
         </Grid.ColumnDefinitions>
 
         <StackPanel Grid.Column="0">
-          <ui:Card Style="{StaticResource CardStyle}">
+          <ui:Card Style="{StaticResource ControlCardStyle}">
             <StackPanel>
               <TextBlock Text="Controls" Style="{StaticResource SectionTitleStyle}" />
-              <TextBlock
-                Margin="0,6,0,18"
-                Text="{Binding StatusMessage}"
-                Style="{StaticResource BodyTextStyle}"
-              />
 
               <Border
-                Style="{StaticResource InfoPanelStyle}"
+                Style="{StaticResource ControlPanelStyle}"
                 Background="{StaticResource BrandTintBrush}"
               >
                 <TextBlock
@@ -122,39 +162,58 @@
                 />
               </Border>
 
-              <ui:ToggleSwitch
-                Content="Enable Keyboard Debug Input"
-                IsChecked="{Binding IsKeyboardDebugMode}"
-                Margin="0,0,0,18"
-              />
-
-              <TextBlock
-                Text="Input TCP Port"
-                Style="{StaticResource BodyTextStyle}"
-                Margin="0,0,0,8"
-              />
-
-              <Grid Margin="0,0,0,18">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="132" />
-                  <ColumnDefinition Width="12" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <ui:TextBox
-                  Grid.Column="0"
-                  Text="{Binding WindowsInputTcpPort, UpdateSourceTrigger=PropertyChanged}"
-                  PlaceholderText="Port"
-                  VerticalContentAlignment="Center"
+              <Border Style="{StaticResource ControlPanelStyle}">
+                <ui:ToggleSwitch
+                  Content="Enable Keyboard Debug Input"
+                  IsChecked="{Binding IsKeyboardDebugMode}"
                 />
+              </Border>
 
-                <ui:Button
-                  Grid.Column="2"
-                  Content="Save Input TCP Port"
-                  Command="{Binding ApplyInputTcpPortCommand}"
-                  Appearance="Primary"
-                />
-              </Grid>
+              <Border Style="{StaticResource ControlPanelStyle}" Margin="0,0,0,14">
+                <StackPanel>
+                  <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock
+                      Text="Input TCP Port"
+                      Style="{StaticResource ControlLabelStyle}"
+                      Margin="0"
+                    />
+                    <TextBlock
+                      Grid.Column="1"
+                      Text="{Binding ActiveWindowsInputTcpPort}"
+                      Style="{StaticResource BodyTextStyle}"
+                      VerticalAlignment="Center"
+                    />
+                  </Grid>
+
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="12" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <ui:TextBox
+                      Grid.Column="0"
+                      Text="{Binding WindowsInputTcpPort, UpdateSourceTrigger=PropertyChanged}"
+                      PlaceholderText="Port"
+                      VerticalContentAlignment="Center"
+                      Height="42"
+                    />
+
+                    <ui:Button
+                      Grid.Column="2"
+                      Content="Save Port"
+                      Command="{Binding ApplyInputTcpPortCommand}"
+                      Appearance="Primary"
+                    />
+                  </Grid>
+                </StackPanel>
+              </Border>
 
               <Grid>
                 <Grid.ColumnDefinitions>
@@ -165,16 +224,19 @@
 
                 <ui:Button
                   Grid.Column="0"
-                  Content="Reinitialize OpenXR"
+                  Content="Refresh OpenXR"
                   Command="{Binding ReinitializeOpenXrCommand}"
                   Appearance="Primary"
                 />
 
                 <ui:Button
                   Grid.Column="2"
-                  Content="Select Window / Monitor"
+                  Content="Select Capture Source"
                   Command="{Binding SelectCaptureTargetCommand}"
-                  Appearance="Secondary"
+                  Appearance="Caution"
+                  Foreground="White"
+                  PressedForeground="White"
+                  HorizontalAlignment="Right"
                 />
               </Grid>
             </StackPanel>
@@ -182,24 +244,92 @@
 
           <ui:Card Style="{StaticResource CardStyle}" Margin="0,0,0,0">
             <StackPanel>
-              <TextBlock Text="Keyboard Mapping" Style="{StaticResource SectionTitleStyle}" />
               <TextBlock
-                Margin="0,10,0,0"
-                Text="Left stick: WASD | Right stick: IJKL | Buttons: 1(X) 2(Y) 3(A) 4(B) | Trigger/Grip: Q E U O | Stick click: LeftShift RightShift | HMD yaw/pitch/roll: Arrow + PageUp/PageDown | HMD position: F/H(X) T/G(Y) R/V(Z)"
-                Style="{StaticResource BodyTextStyle}"
+                Text="Keyboard Mapping"
+                Style="{StaticResource SectionTitleStyle}"
+                Margin="0,0,0,12"
               />
+
+              <Border Style="{StaticResource InfoPanelStyle}" Padding="14,10">
+                <StackPanel>
+                  <TextBlock Text="Sticks" Style="{StaticResource MappingGroupTitleStyle}" />
+                  <TextBlock Text="Left stick: WASD" Style="{StaticResource MappingTextStyle}" />
+                  <TextBlock
+                    Margin="0,4,0,0"
+                    Text="Right stick: IJKL"
+                    Style="{StaticResource MappingTextStyle}"
+                  />
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource InfoPanelStyle}" Padding="14,10">
+                <StackPanel>
+                  <TextBlock Text="Face Buttons" Style="{StaticResource MappingGroupTitleStyle}" />
+                  <TextBlock
+                    Text="X: 1    Y: 2    A: 3    B: 4"
+                    Style="{StaticResource MappingTextStyle}"
+                  />
+                  <TextBlock
+                    Margin="0,4,0,0"
+                    Text="Stick click: LeftShift / RightShift"
+                    Style="{StaticResource MappingTextStyle}"
+                  />
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource InfoPanelStyle}" Padding="14,10">
+                <StackPanel>
+                  <TextBlock
+                    Text="Trigger And Grip"
+                    Style="{StaticResource MappingGroupTitleStyle}"
+                  />
+                  <TextBlock
+                    Text="Left trigger / grip: Q / E"
+                    Style="{StaticResource MappingTextStyle}"
+                  />
+                  <TextBlock
+                    Margin="0,4,0,0"
+                    Text="Right trigger / grip: U / O"
+                    Style="{StaticResource MappingTextStyle}"
+                  />
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource InfoPanelStyle}" Margin="0" Padding="14,10">
+                <StackPanel>
+                  <TextBlock Text="HMD" Style="{StaticResource MappingGroupTitleStyle}" />
+                  <TextBlock
+                    Text="Yaw and pitch: Arrow keys"
+                    Style="{StaticResource MappingTextStyle}"
+                  />
+                  <TextBlock
+                    Margin="0,4,0,0"
+                    Text="Roll: PageUp / PageDown"
+                    Style="{StaticResource MappingTextStyle}"
+                  />
+                  <TextBlock
+                    Margin="0,4,0,0"
+                    Text="Position X / Y / Z: F-H / T-G / R-V"
+                    Style="{StaticResource MappingTextStyle}"
+                  />
+                </StackPanel>
+              </Border>
             </StackPanel>
           </ui:Card>
         </StackPanel>
 
-        <StackPanel Grid.Column="2">
-          <ui:Card Style="{StaticResource CardStyle}">
+        <Grid Grid.Column="2">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+
+          <ui:Card Grid.Row="0" Style="{StaticResource CompactCardStyle}">
             <StackPanel>
-              <TextBlock Text="Overview" Style="{StaticResource PageTitleStyle}" />
               <TextBlock
-                Margin="0,8,0,20"
-                Text="{Binding OpenXrInputStatus}"
-                Style="{StaticResource BodyTextStyle}"
+                Text="Overview"
+                Style="{StaticResource PageTitleStyle}"
+                Margin="0,0,0,10"
               />
 
               <Grid>
@@ -208,37 +338,16 @@
                   <ColumnDefinition Width="12" />
                   <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                  <RowDefinition Height="Auto" />
-                  <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource InfoPanelStyle}">
+                <Border Grid.Column="0" Style="{StaticResource CompactInfoPanelStyle}" Margin="0">
                   <TextBlock
                     Text="{Binding OpenXrInputStatus}"
                     Style="{StaticResource MetricTextStyle}"
                   />
                 </Border>
-                <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource InfoPanelStyle}">
+                <Border Grid.Column="2" Style="{StaticResource CompactInfoPanelStyle}" Margin="0">
                   <TextBlock
                     Text="{Binding BridgeStatus}"
-                    Style="{StaticResource MetricTextStyle}"
-                  />
-                </Border>
-                <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource InfoPanelStyle}">
-                  <TextBlock
-                    Text="{Binding VideoStatus}"
-                    Style="{StaticResource MetricTextStyle}"
-                  />
-                </Border>
-                <Border
-                  Grid.Row="1"
-                  Grid.Column="2"
-                  Style="{StaticResource InfoPanelStyle}"
-                  Margin="0,0,0,0"
-                >
-                  <TextBlock
-                    Text="{Binding CaptureStatus}"
                     Style="{StaticResource MetricTextStyle}"
                   />
                 </Border>
@@ -246,85 +355,91 @@
             </StackPanel>
           </ui:Card>
 
-          <ui:Card Style="{StaticResource CardStyle}">
-            <StackPanel>
-              <TextBlock Text="Capture And Render" Style="{StaticResource SectionTitleStyle}" />
-              <TextBlock
-                Margin="0,6,0,18"
-                Text="{Binding VideoRenderConfigStatus}"
-                Style="{StaticResource BodyTextStyle}"
-              />
+          <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="0.92*" />
+              <ColumnDefinition Width="20" />
+              <ColumnDefinition Width="1.08*" />
+            </Grid.ColumnDefinitions>
 
-              <Border Style="{StaticResource InfoPanelStyle}">
+            <ui:Card Grid.Column="0" Style="{StaticResource CompactCardStyle}" Margin="0">
+              <StackPanel>
                 <TextBlock
-                  Text="{Binding CaptureStatus}"
-                  Style="{StaticResource MetricTextStyle}"
+                  Text="Capture And Render"
+                  Style="{StaticResource SectionTitleStyle}"
+                  Margin="0,0,0,12"
                 />
-              </Border>
 
-              <Border Style="{StaticResource InfoPanelStyle}">
-                <TextBlock
-                  Text="{Binding VideoRenderConfigStatus}"
-                  Style="{StaticResource MetricTextStyle}"
-                />
-              </Border>
-
-              <Border Style="{StaticResource InfoPanelStyle}" Margin="0">
-                <TextBlock
-                  Text="{Binding VideoRenderErrorStatus}"
-                  Foreground="{StaticResource ErrorBrush}"
-                  TextWrapping="Wrap"
-                />
-              </Border>
-            </StackPanel>
-          </ui:Card>
-
-          <ui:Card Style="{StaticResource CardStyle}" Margin="0">
-            <StackPanel>
-              <TextBlock Text="Tracking" Style="{StaticResource SectionTitleStyle}" />
-              <TextBlock
-                Margin="0,6,0,18"
-                Text="{Binding ActiveInputSource}"
-                Style="{StaticResource BodyTextStyle}"
-              />
-
-              <TabControl Margin="0,16,0,0">
-                <TabItem Header="3D View">
-                  <controls:OpenXrSceneView
-                    Height="360"
-                    State="{Binding CurrentOpenXrState}"
-                    StatusText="{Binding OpenXrInputStatus}"
+                <Border Style="{StaticResource CompactInfoPanelStyle}">
+                  <TextBlock
+                    Text="{Binding CaptureStatus}"
+                    Style="{StaticResource MetricTextStyle}"
                   />
-                </TabItem>
+                </Border>
 
-                <TabItem Header="Text">
-                  <StackPanel Margin="12">
-                    <Border Style="{StaticResource InfoPanelStyle}">
-                      <TextBlock
-                        Text="{Binding HmdPoseState}"
-                        Style="{StaticResource MetricTextStyle}"
-                      />
-                    </Border>
+                <Border Style="{StaticResource CompactInfoPanelStyle}">
+                  <TextBlock
+                    Text="{Binding VideoRenderConfigStatus}"
+                    Style="{StaticResource MetricTextStyle}"
+                  />
+                </Border>
 
-                    <Border Style="{StaticResource InfoPanelStyle}">
-                      <TextBlock
-                        Text="{Binding LeftControllerState}"
-                        Style="{StaticResource MetricTextStyle}"
-                      />
-                    </Border>
+                <Border Style="{StaticResource CompactInfoPanelStyle}" Margin="0">
+                  <TextBlock
+                    Text="{Binding VideoRenderErrorStatus}"
+                    Foreground="{StaticResource ErrorBrush}"
+                    TextWrapping="Wrap"
+                  />
+                </Border>
+              </StackPanel>
+            </ui:Card>
 
-                    <Border Style="{StaticResource InfoPanelStyle}" Margin="0">
-                      <TextBlock
-                        Text="{Binding RightControllerState}"
-                        Style="{StaticResource MetricTextStyle}"
-                      />
-                    </Border>
-                  </StackPanel>
-                </TabItem>
-              </TabControl>
-            </StackPanel>
-          </ui:Card>
-        </StackPanel>
+            <ui:Card Grid.Column="2" Style="{StaticResource CompactCardStyle}" Margin="0">
+              <StackPanel>
+                <TextBlock
+                  Text="Tracking"
+                  Style="{StaticResource SectionTitleStyle}"
+                  Margin="0,0,0,12"
+                />
+
+                <TabControl Margin="0,4,0,0">
+                  <TabItem Header="3D View">
+                    <controls:OpenXrSceneView
+                      Height="300"
+                      State="{Binding CurrentOpenXrState}"
+                      StatusText="{Binding OpenXrInputStatus}"
+                    />
+                  </TabItem>
+
+                  <TabItem Header="Text">
+                    <StackPanel Margin="10">
+                      <Border Style="{StaticResource CompactInfoPanelStyle}">
+                        <TextBlock
+                          Text="{Binding HmdPoseState}"
+                          Style="{StaticResource MetricTextStyle}"
+                        />
+                      </Border>
+
+                      <Border Style="{StaticResource CompactInfoPanelStyle}">
+                        <TextBlock
+                          Text="{Binding LeftControllerState}"
+                          Style="{StaticResource MetricTextStyle}"
+                        />
+                      </Border>
+
+                      <Border Style="{StaticResource CompactInfoPanelStyle}" Margin="0">
+                        <TextBlock
+                          Text="{Binding RightControllerState}"
+                          Style="{StaticResource MetricTextStyle}"
+                        />
+                      </Border>
+                    </StackPanel>
+                  </TabItem>
+                </TabControl>
+              </StackPanel>
+            </ui:Card>
+          </Grid>
+        </Grid>
       </Grid>
     </ScrollViewer>
 

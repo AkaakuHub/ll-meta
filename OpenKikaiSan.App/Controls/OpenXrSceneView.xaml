@@ -30,13 +30,7 @@
       CameraRotationMode="Turntable"
     >
       <hx:Viewport3DX.Camera>
-        <hx:PerspectiveCamera
-          Position="0,5,34"
-          LookDirection="0,-1,-34"
-          UpDirection="0,1,0"
-          FarPlaneDistance="200"
-          NearPlaneDistance="0.1"
-        />
+        <hx:PerspectiveCamera FarPlaneDistance="200" NearPlaneDistance="0.1" />
       </hx:Viewport3DX.Camera>
 
       <hx:AmbientLight3D Color="#FFFFFFFF" />
@@ -57,22 +51,5 @@
         NumberOfBlurPass="1"
       />
     </hx:Viewport3DX>
-
-    <Border
-      HorizontalAlignment="Left"
-      VerticalAlignment="Top"
-      Margin="16"
-      Padding="10,6"
-      Background="#CCFFFFFF"
-      BorderBrush="#14000000"
-      BorderThickness="1"
-      CornerRadius="8"
-    >
-      <TextBlock
-        Text="{Binding StatusText, RelativeSource={RelativeSource AncestorType=UserControl}}"
-        Foreground="#5E5E5E"
-        FontSize="12"
-      />
-    </Border>
   </Grid>
 </UserControl>

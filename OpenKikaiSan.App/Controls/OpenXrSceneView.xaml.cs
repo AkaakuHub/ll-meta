@@ -28,15 +28,20 @@ public partial class OpenXrSceneView : UserControl
     private const float ThumbstickTiltRadians = 0.32f;
     private const float ThumbstickPressTravel = 0.08f;
     private const float HeadPositionScale = 10.0f;
-    private static readonly Vector3 HmdBaseTranslation = new(0.0f, -1.4f, 0.0f);
+    private const float SceneVerticalOffset = 7.0f;
+    private static readonly Vector3 HmdBaseTranslation = new(
+        0.0f,
+        -1.4f + SceneVerticalOffset,
+        0.0f
+    );
     private static readonly Quaternion OpenXrToSceneBasisRotation = Quaternion.CreateFromAxisAngle(
         Vector3.UnitY,
         MathF.PI
     );
     private static readonly Vector4 ActiveGlowColor = new(0.18f, 0.42f, 1.35f, 1.0f);
     private static readonly Vector4 ActiveTintColor = new(0.24f, 0.5f, 1.0f, 1.0f);
-    private static readonly Media3DPoint3D DefaultCameraPosition = new(0, 5, 34);
-    private static readonly Media3DVector3D DefaultCameraLookDirection = new(0, -1, -34);
+    private static readonly Media3DPoint3D DefaultCameraPosition = new(0, 25, -20);
+    private static readonly Media3DVector3D DefaultCameraLookDirection = new(0, -35, 34);
     private static readonly Media3DVector3D DefaultCameraUpDirection = new(0, 1, 0);
 
     private readonly Dictionary<string, SceneNode> _nodesByName = new(StringComparer.Ordinal);
@@ -295,7 +300,7 @@ public partial class OpenXrSceneView : UserControl
         {
             _leftControllerRootNode.ModelMatrix = CreateStaticRootMatrix(
                 _leftControllerRootNode.ModelMatrix,
-                new Vector3(7.5f, -1.2f, 5.2f),
+                new Vector3(7.5f, -1.2f + SceneVerticalOffset, 5.2f),
                 0.55f
             );
         }
@@ -304,7 +309,7 @@ public partial class OpenXrSceneView : UserControl
         {
             _rightControllerRootNode.ModelMatrix = CreateStaticRootMatrix(
                 _rightControllerRootNode.ModelMatrix,
-                new Vector3(-7.5f, -1.2f, 5.2f),
+                new Vector3(-7.5f, -1.2f + SceneVerticalOffset, 5.2f),
                 -0.55f
             );
         }

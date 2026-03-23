@@ -23,6 +23,7 @@ public sealed class MainViewModel : ViewModelBase
     private string _videoRenderConfigStatus = "Video render config: not initialized";
     private string _videoRenderErrorStatus = "Video render error: none";
     private string _windowsInputTcpPort = string.Empty;
+    private string _activeWindowsInputTcpPort = string.Empty;
     private int _appliedWindowsInputTcpPort;
     private string _captureStatus = "Capture: not selected";
     private OpenXrControllerState _currentOpenXrState;
@@ -32,6 +33,9 @@ public sealed class MainViewModel : ViewModelBase
         _logger = logger;
         _appliedWindowsInputTcpPort = settings.WindowsInputTcpPort;
         _windowsInputTcpPort = settings.WindowsInputTcpPort.ToString(CultureInfo.InvariantCulture);
+        _activeWindowsInputTcpPort = settings.WindowsInputTcpPort.ToString(
+            CultureInfo.InvariantCulture
+        );
 
         _applyInputTcpPortCommand = new RelayCommand(
             _ => ApplyInputTcpPort(),
@@ -126,6 +130,12 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    public string ActiveWindowsInputTcpPort
+    {
+        get => _activeWindowsInputTcpPort;
+        private set => SetProperty(ref _activeWindowsInputTcpPort, value);
+    }
+
     public string CaptureStatus
     {
         get => _captureStatus;
@@ -167,6 +177,7 @@ public sealed class MainViewModel : ViewModelBase
     public void SetInputTcpPortForDisplay(int port)
     {
         _appliedWindowsInputTcpPort = port;
+        ActiveWindowsInputTcpPort = port.ToString(CultureInfo.InvariantCulture);
         WindowsInputTcpPort = port.ToString(CultureInfo.InvariantCulture);
         _applyInputTcpPortCommand.RaiseCanExecuteChanged();
     }
