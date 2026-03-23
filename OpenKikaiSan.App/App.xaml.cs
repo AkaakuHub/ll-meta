@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Windows;
 using OpenKikaiSan.App.Models;
 using OpenKikaiSan.App.Services;
@@ -126,11 +127,15 @@ public partial class App : System.Windows.Application
             };
             mainViewModel.InputTcpPortApplyRequested += port =>
             {
-                settings.WindowsInputTcpPort = port;
-                settingsStore.Save(settings);
-                mainViewModel.SetInputTcpPortForDisplay(port);
-                InitializeWindowsInputTcpServer(logger, port, mainViewModel);
-                mainViewModel.StatusMessage = $"Windows input TCP port applied: {port}";
+                TryApplyWindowsInputTcpPort(
+                    logger,
+                    settingsStore,
+                    settings,
+                    port,
+                    mainViewModel,
+                    allowAutomaticFallback: false,
+                    promptForAutomaticFallback: true
+                );
             };
             mainViewModel.CaptureTargetSelectionRequested += async () =>
             {
@@ -170,7 +175,15 @@ public partial class App : System.Windows.Application
                 }
             };
 
-            InitializeWindowsInputTcpServer(logger, inputTcpPort, mainViewModel);
+            TryApplyWindowsInputTcpPort(
+                logger,
+                settingsStore,
+                settings,
+                inputTcpPort,
+                mainViewModel,
+                allowAutomaticFallback: true,
+                promptForAutomaticFallback: false
+            );
             _windowCaptureService = new WindowCaptureService(logger);
             _windowCaptureService.FrameCaptured += frame =>
             {
@@ -298,10 +311,14 @@ public partial class App : System.Windows.Application
         return DefaultWindowsInputTcpPort;
     }
 
-    private void InitializeWindowsInputTcpServer(
+    private void TryApplyWindowsInputTcpPort(
         AppLogger logger,
+        SettingsStore settingsStore,
+        AppSettings settings,
         int inputTcpPort,
-        MainViewModel mainViewModel
+        MainViewModel mainViewModel,
+        bool allowAutomaticFallback,
+        bool promptForAutomaticFallback
     )
     {
         var sanitizedPort = ResolveValidWindowsInputTcpPort(inputTcpPort);
@@ -310,10 +327,176 @@ public partial class App : System.Windows.Application
             mainViewModel.SetInputTcpPortForDisplay(sanitizedPort);
         }
 
-        _windowsInputTcpServerService?.Dispose();
-        _windowsInputTcpServerService = new WindowsInputTcpServerService(logger, sanitizedPort);
-        _windowsInputTcpServerService.Start();
-        logger.Info(_windowsInputTcpServerService.StatusText);
+        if (
+            TryStartWindowsInputTcpServer(
+                logger,
+                sanitizedPort,
+                mainViewModel,
+                out var activePort,
+                out var socketErrorCode,
+                out _
+            )
+        )
+        {
+            settings.WindowsInputTcpPort = activePort;
+            settingsStore.Save(settings);
+            mainViewModel.SetInputTcpPortForDisplay(activePort);
+            mainViewModel.StatusMessage = $"Windows input TCP port applied: {activePort}";
+            return;
+        }
+
+        if (
+            allowAutomaticFallback
+            && socketErrorCode == SocketError.AddressAlreadyInUse
+            && TryStartWindowsInputTcpServer(
+                logger,
+                0,
+                mainViewModel,
+                out var resolvedFallbackPort,
+                out _,
+                out _
+            )
+        )
+        {
+            settings.WindowsInputTcpPort = resolvedFallbackPort;
+            settingsStore.Save(settings);
+            mainViewModel.SetInputTcpPortForDisplay(resolvedFallbackPort);
+            mainViewModel.StatusMessage =
+                $"Input TCP port {sanitizedPort} was already in use. Switched to {resolvedFallbackPort}.";
+            return;
+        }
+
+        if (socketErrorCode == SocketError.AddressAlreadyInUse)
+        {
+            if (
+                promptForAutomaticFallback
+                && TryPromptAndSwitchToAutomaticPort(
+                    logger,
+                    settingsStore,
+                    settings,
+                    sanitizedPort,
+                    mainViewModel
+                )
+            )
+            {
+                return;
+            }
+
+            mainViewModel.StatusMessage =
+                $"Input TCP port {sanitizedPort} is already in use by another process.";
+            return;
+        }
+
+        mainViewModel.StatusMessage = $"Failed to start Input TCP on port {sanitizedPort}.";
+    }
+
+    private bool TryPromptAndSwitchToAutomaticPort(
+        AppLogger logger,
+        SettingsStore settingsStore,
+        AppSettings settings,
+        int requestedPort,
+        MainViewModel mainViewModel
+    )
+    {
+        var result = System.Windows.MessageBox.Show(
+            $"Input TCP port {requestedPort} is already in use.{Environment.NewLine}{Environment.NewLine}Switch to an available port automatically?",
+            "Input TCP Port Conflict",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning
+        );
+        if (result != MessageBoxResult.Yes)
+        {
+            return false;
+        }
+
+        if (
+            !TryStartWindowsInputTcpServer(
+                logger,
+                0,
+                mainViewModel,
+                out var activePort,
+                out _,
+                out _
+            )
+        )
+        {
+            mainViewModel.StatusMessage = "Failed to allocate an available Input TCP port.";
+            return false;
+        }
+
+        settings.WindowsInputTcpPort = activePort;
+        settingsStore.Save(settings);
+        mainViewModel.SetInputTcpPortForDisplay(activePort);
+        mainViewModel.StatusMessage =
+            $"Input TCP port {requestedPort} was unavailable. Switched to {activePort}.";
+        return true;
+    }
+
+    private bool TryStartWindowsInputTcpServer(
+        AppLogger logger,
+        int inputTcpPort,
+        MainViewModel mainViewModel,
+        out int activePort,
+        out SocketError socketErrorCode,
+        out string bridgeStatusOnFailure
+    )
+    {
+        activePort = inputTcpPort;
+        socketErrorCode = SocketError.Success;
+        bridgeStatusOnFailure = string.Empty;
+
+        var candidateServerService = new WindowsInputTcpServerService(logger, inputTcpPort);
+
+        try
+        {
+            candidateServerService.Start();
+            activePort = candidateServerService.BoundPort;
+            var previousServerService = _windowsInputTcpServerService;
+            _windowsInputTcpServerService = candidateServerService;
+            previousServerService?.Dispose();
+            logger.Info(_windowsInputTcpServerService.StatusText);
+            return true;
+        }
+        catch (SocketException ex)
+        {
+            socketErrorCode = ex.SocketErrorCode;
+            bridgeStatusOnFailure =
+                BuildTcpPortErrorMessage(inputTcpPort, ex.SocketErrorCode) + EmulatorRouteHint;
+            logger.Error($"Input TCP startup failed on port {inputTcpPort}.", ex);
+            candidateServerService.Dispose();
+            if (_windowsInputTcpServerService is null)
+            {
+                mainViewModel.BridgeStatus = bridgeStatusOnFailure;
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            bridgeStatusOnFailure =
+                $"Input TCP: startup failed ({inputTcpPort})" + EmulatorRouteHint;
+            logger.Error($"Input TCP startup failed on port {inputTcpPort}.", ex);
+            candidateServerService.Dispose();
+            if (_windowsInputTcpServerService is null)
+            {
+                mainViewModel.BridgeStatus = bridgeStatusOnFailure;
+            }
+
+            return false;
+        }
+    }
+
+    private static string BuildTcpPortErrorMessage(int port, SocketError socketErrorCode)
+    {
+        return socketErrorCode switch
+        {
+            SocketError.AddressAlreadyInUse when port == 0 =>
+                "Input TCP: failed to allocate an available port",
+            SocketError.AddressAlreadyInUse =>
+                $"Input TCP: port {port} is already used by another process",
+            SocketError.AccessDenied => $"Input TCP: access denied for port {port}",
+            _ => $"Input TCP: failed to bind port {port} ({socketErrorCode})",
+        };
     }
 
     protected override void OnExit(ExitEventArgs e)

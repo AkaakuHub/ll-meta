@@ -14,7 +14,7 @@ public sealed class WindowsInputTcpServerService : IDisposable
     private readonly AppLogger _logger;
     private readonly object _stateLock = new();
     private readonly object _clientLock = new();
-    private readonly int _port;
+    private readonly int _requestedPort;
     private TcpListener? _listener;
     private CancellationTokenSource? _lifecycleCts;
     private Task? _acceptLoopTask;
@@ -23,15 +23,19 @@ public sealed class WindowsInputTcpServerService : IDisposable
     private NetworkStream? _clientStream;
     private OpenXrControllerState _latestInputState;
     private bool _isKeyboardDebugMode;
+    private int _boundPort;
     private string _statusText;
 
     public WindowsInputTcpServerService(AppLogger logger, int port)
     {
         _logger = logger;
-        _port = port;
+        _requestedPort = port;
         _latestInputState = default;
+        _boundPort = port;
         _statusText = $"Input TCP: stopped ({port})";
     }
+
+    public int BoundPort => _boundPort;
 
     public string StatusText
     {
@@ -51,13 +55,14 @@ public sealed class WindowsInputTcpServerService : IDisposable
             return;
         }
 
-        _listener = new TcpListener(IPAddress.Any, _port);
+        _listener = new TcpListener(IPAddress.Any, _requestedPort);
         _listener.Start();
+        _boundPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
         _lifecycleCts = new CancellationTokenSource();
         var token = _lifecycleCts.Token;
         lock (_stateLock)
         {
-            _statusText = $"Input TCP: listening on {_port}";
+            _statusText = $"Input TCP: listening on {_boundPort}";
         }
 
         _acceptLoopTask = Task.Run(() => AcceptLoopAsync(token), token);
@@ -107,7 +112,7 @@ public sealed class WindowsInputTcpServerService : IDisposable
         _listener = null;
         lock (_stateLock)
         {
-            _statusText = $"Input TCP: stopped ({_port})";
+            _statusText = $"Input TCP: stopped ({_boundPort})";
         }
     }
 
@@ -133,7 +138,7 @@ public sealed class WindowsInputTcpServerService : IDisposable
                 }
                 lock (_stateLock)
                 {
-                    _statusText = $"Input TCP: client connected ({_port})";
+                    _statusText = $"Input TCP: client connected ({_boundPort})";
                 }
             }
             catch (OperationCanceledException)
@@ -145,7 +150,7 @@ public sealed class WindowsInputTcpServerService : IDisposable
                 _logger.Error("Input TCP accept failed.", ex);
                 lock (_stateLock)
                 {
-                    _statusText = $"Input TCP: accept error ({_port})";
+                    _statusText = $"Input TCP: accept error ({_boundPort})";
                 }
                 try
                 {
@@ -199,7 +204,7 @@ public sealed class WindowsInputTcpServerService : IDisposable
                 CloseClient();
                 lock (_stateLock)
                 {
-                    _statusText = $"Input TCP: send error, waiting reconnect ({_port})";
+                    _statusText = $"Input TCP: send error, waiting reconnect ({_boundPort})";
                 }
             }
         }

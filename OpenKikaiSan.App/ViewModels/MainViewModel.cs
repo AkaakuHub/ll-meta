@@ -9,6 +9,7 @@ namespace OpenKikaiSan.App.ViewModels;
 public sealed class MainViewModel : ViewModelBase
 {
     private readonly AppLogger _logger;
+    private readonly RelayCommand _applyInputTcpPortCommand;
 
     private string _statusMessage = "Ready";
     private string _openXrInputStatus = "OpenXR input: not initialized";
@@ -22,15 +23,21 @@ public sealed class MainViewModel : ViewModelBase
     private string _videoRenderConfigStatus = "Video render config: not initialized";
     private string _videoRenderErrorStatus = "Video render error: none";
     private string _windowsInputTcpPort = string.Empty;
+    private int _appliedWindowsInputTcpPort;
     private string _captureStatus = "Capture: not selected";
     private OpenXrControllerState _currentOpenXrState;
 
     public MainViewModel(AppSettings settings, AppLogger logger)
     {
         _logger = logger;
+        _appliedWindowsInputTcpPort = settings.WindowsInputTcpPort;
         _windowsInputTcpPort = settings.WindowsInputTcpPort.ToString(CultureInfo.InvariantCulture);
 
-        ApplyInputTcpPortCommand = new RelayCommand(_ => ApplyInputTcpPort());
+        _applyInputTcpPortCommand = new RelayCommand(
+            _ => ApplyInputTcpPort(),
+            _ => CanApplyInputTcpPort()
+        );
+        ApplyInputTcpPortCommand = _applyInputTcpPortCommand;
         ReinitializeOpenXrCommand = new RelayCommand(_ => RequestReinitializeOpenXr());
         SelectCaptureTargetCommand = new RelayCommand(_ => RequestSelectCaptureTarget());
     }
@@ -112,7 +119,11 @@ public sealed class MainViewModel : ViewModelBase
     public string WindowsInputTcpPort
     {
         get => _windowsInputTcpPort;
-        set => SetProperty(ref _windowsInputTcpPort, value);
+        set
+        {
+            SetProperty(ref _windowsInputTcpPort, value);
+            _applyInputTcpPortCommand.RaiseCanExecuteChanged();
+        }
     }
 
     public string CaptureStatus
@@ -155,7 +166,9 @@ public sealed class MainViewModel : ViewModelBase
 
     public void SetInputTcpPortForDisplay(int port)
     {
+        _appliedWindowsInputTcpPort = port;
         WindowsInputTcpPort = port.ToString(CultureInfo.InvariantCulture);
+        _applyInputTcpPortCommand.RaiseCanExecuteChanged();
     }
 
     private void ApplyInputTcpPort()
@@ -180,9 +193,30 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         WindowsInputTcpPort = port.ToString(CultureInfo.InvariantCulture);
+        _logger.Info($"Input TCP port apply requested: {port}");
         InputTcpPortApplyRequested?.Invoke(port);
-        StatusMessage = $"Input TCP port save requested: {port}";
-        _logger.Info($"Input TCP port save requested: {port}");
+    }
+
+    private bool CanApplyInputTcpPort()
+    {
+        if (
+            !int.TryParse(
+                WindowsInputTcpPort.Trim(),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var port
+            )
+        )
+        {
+            return false;
+        }
+
+        if (port < 1 || port > 65535)
+        {
+            return false;
+        }
+
+        return port != _appliedWindowsInputTcpPort;
     }
 
     private static string ToOnOff(bool value)
