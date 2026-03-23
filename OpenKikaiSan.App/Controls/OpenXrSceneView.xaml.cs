@@ -40,6 +40,7 @@ public partial class OpenXrSceneView : UserControl
     );
     private static readonly Vector4 ActiveGlowColor = new(0.18f, 0.42f, 1.35f, 1.0f);
     private static readonly Vector4 ActiveTintColor = new(0.24f, 0.5f, 1.0f, 1.0f);
+    private static readonly object NullMaterialColorValue = new();
     private static readonly Media3DPoint3D DefaultCameraPosition = new(0, 25, -20);
     private static readonly Media3DVector3D DefaultCameraLookDirection = new(0, -35, 34);
     private static readonly Media3DVector3D DefaultCameraUpDirection = new(0, 1, 0);
@@ -684,12 +685,25 @@ public partial class OpenXrSceneView : UserControl
         var key = (material, propertyName);
         if (!_baseMaterialValues.ContainsKey(key))
         {
-            _baseMaterialValues[key] =
-                property.GetValue(material)
-                ?? CreateColorValue(property.PropertyType, Vector4.Zero);
+            _baseMaterialValues[key] = property.GetValue(material) ?? NullMaterialColorValue;
         }
 
-        var baseColor = ReadColorValue(_baseMaterialValues[key]);
+        var baseValue = _baseMaterialValues[key];
+        if (blendAmount <= 0.0f)
+        {
+            property.SetValue(
+                material,
+                ReferenceEquals(baseValue, NullMaterialColorValue) ? null : baseValue
+            );
+            return;
+        }
+
+        if (ReferenceEquals(baseValue, NullMaterialColorValue))
+        {
+            return;
+        }
+
+        var baseColor = ReadColorValue(baseValue);
         var blendedColor = Vector4.Lerp(
             baseColor,
             targetColor,
