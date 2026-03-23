@@ -58,7 +58,7 @@ public partial class App
 
         var renderStats = _openXrControllerInputService?.GetVideoRenderStatsSnapshot();
         var captureStatus = _windowCaptureService?.GetStatusText() ?? "Capture: unavailable";
-        logger.Info(
+        logger.Debug(
             "Capture pipeline stats: "
                 + $"status={captureStatus} "
                 + $"renSeq={(renderStats?.LastRenderedSequence ?? 0)} "
@@ -81,7 +81,7 @@ public partial class App
             return;
         }
 
-        logger.Info(
+        logger.Debug(
             "Capture render issue: "
                 + $"renSeq={renderStats.Value.LastRenderedSequence} "
                 + $"renFail={renderStats.Value.LastUploadFailureCode} "

@@ -137,7 +137,7 @@
       Grid.Row="1"
       VerticalScrollBarVisibility="Auto"
       HorizontalScrollBarVisibility="Disabled"
-      Padding="24,20,24,12"
+      Padding="24,16,24,12"
       Background="Transparent"
     >
       <Grid>
@@ -150,18 +150,6 @@
         <StackPanel Grid.Column="0">
           <ui:Card Style="{StaticResource ControlCardStyle}">
             <StackPanel>
-              <TextBlock Text="Controls" Style="{StaticResource SectionTitleStyle}" />
-
-              <Border
-                Style="{StaticResource ControlPanelStyle}"
-                Background="{StaticResource BrandTintBrush}"
-              >
-                <TextBlock
-                  Text="{Binding ActiveInputSource}"
-                  Style="{StaticResource MetricTextStyle}"
-                />
-              </Border>
-
               <Border Style="{StaticResource ControlPanelStyle}">
                 <ui:ToggleSwitch
                   Content="Enable Keyboard Debug Input"
@@ -215,9 +203,37 @@
                 </StackPanel>
               </Border>
 
+              <Border Style="{StaticResource ControlPanelStyle}" Margin="0,0,0,14">
+                <StackPanel>
+                  <TextBlock Text="Log Level" Style="{StaticResource ControlLabelStyle}" />
+
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="132" />
+                      <ColumnDefinition Width="12" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <ComboBox
+                      Grid.Column="0"
+                      ItemsSource="{Binding AvailableLogLevels}"
+                      SelectedItem="{Binding LogLevel}"
+                      Height="42"
+                    />
+
+                    <ui:Button
+                      Grid.Column="2"
+                      Content="Save Log"
+                      Command="{Binding ApplyLogLevelCommand}"
+                      Appearance="Secondary"
+                    />
+                  </Grid>
+                </StackPanel>
+              </Border>
+
               <Grid>
                 <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="144" />
                   <ColumnDefinition Width="12" />
                   <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
@@ -241,97 +257,17 @@
               </Grid>
             </StackPanel>
           </ui:Card>
-
-          <ui:Card Style="{StaticResource CardStyle}" Margin="0,0,0,0">
-            <StackPanel>
-              <TextBlock
-                Text="Keyboard Mapping"
-                Style="{StaticResource SectionTitleStyle}"
-                Margin="0,0,0,12"
-              />
-
-              <Border Style="{StaticResource InfoPanelStyle}" Padding="14,10">
-                <StackPanel>
-                  <TextBlock Text="Sticks" Style="{StaticResource MappingGroupTitleStyle}" />
-                  <TextBlock Text="Left stick: WASD" Style="{StaticResource MappingTextStyle}" />
-                  <TextBlock
-                    Margin="0,4,0,0"
-                    Text="Right stick: IJKL"
-                    Style="{StaticResource MappingTextStyle}"
-                  />
-                </StackPanel>
-              </Border>
-
-              <Border Style="{StaticResource InfoPanelStyle}" Padding="14,10">
-                <StackPanel>
-                  <TextBlock Text="Face Buttons" Style="{StaticResource MappingGroupTitleStyle}" />
-                  <TextBlock
-                    Text="X: 1    Y: 2    A: 3    B: 4"
-                    Style="{StaticResource MappingTextStyle}"
-                  />
-                  <TextBlock
-                    Margin="0,4,0,0"
-                    Text="Stick click: LeftShift / RightShift"
-                    Style="{StaticResource MappingTextStyle}"
-                  />
-                </StackPanel>
-              </Border>
-
-              <Border Style="{StaticResource InfoPanelStyle}" Padding="14,10">
-                <StackPanel>
-                  <TextBlock
-                    Text="Trigger And Grip"
-                    Style="{StaticResource MappingGroupTitleStyle}"
-                  />
-                  <TextBlock
-                    Text="Left trigger / grip: Q / E"
-                    Style="{StaticResource MappingTextStyle}"
-                  />
-                  <TextBlock
-                    Margin="0,4,0,0"
-                    Text="Right trigger / grip: U / O"
-                    Style="{StaticResource MappingTextStyle}"
-                  />
-                </StackPanel>
-              </Border>
-
-              <Border Style="{StaticResource InfoPanelStyle}" Margin="0" Padding="14,10">
-                <StackPanel>
-                  <TextBlock Text="HMD" Style="{StaticResource MappingGroupTitleStyle}" />
-                  <TextBlock
-                    Text="Yaw and pitch: Arrow keys"
-                    Style="{StaticResource MappingTextStyle}"
-                  />
-                  <TextBlock
-                    Margin="0,4,0,0"
-                    Text="Roll: PageUp / PageDown"
-                    Style="{StaticResource MappingTextStyle}"
-                  />
-                  <TextBlock
-                    Margin="0,4,0,0"
-                    Text="Position X / Y / Z: F-H / T-G / R-V"
-                    Style="{StaticResource MappingTextStyle}"
-                  />
-                </StackPanel>
-              </Border>
-            </StackPanel>
-          </ui:Card>
         </StackPanel>
 
         <Grid Grid.Column="2">
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
 
           <ui:Card Grid.Row="0" Style="{StaticResource CompactCardStyle}">
             <StackPanel>
-              <TextBlock
-                Text="Overview"
-                Style="{StaticResource PageTitleStyle}"
-                Margin="0,0,0,10"
-              />
-
               <Grid>
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="*" />
@@ -372,6 +308,13 @@
 
                 <Border Style="{StaticResource CompactInfoPanelStyle}">
                   <TextBlock
+                    Text="{Binding ActiveInputSource}"
+                    Style="{StaticResource MetricTextStyle}"
+                  />
+                </Border>
+
+                <Border Style="{StaticResource CompactInfoPanelStyle}">
+                  <TextBlock
                     Text="{Binding CaptureStatus}"
                     Style="{StaticResource MetricTextStyle}"
                   />
@@ -404,11 +347,7 @@
 
                 <TabControl Margin="0,4,0,0">
                   <TabItem Header="3D View">
-                    <controls:OpenXrSceneView
-                      Height="300"
-                      State="{Binding CurrentOpenXrState}"
-                      StatusText="{Binding OpenXrInputStatus}"
-                    />
+                    <controls:OpenXrSceneView Height="300" State="{Binding CurrentOpenXrState}" />
                   </TabItem>
 
                   <TabItem Header="Text">
@@ -439,6 +378,99 @@
               </StackPanel>
             </ui:Card>
           </Grid>
+
+          <ui:Card Grid.Row="2" Style="{StaticResource CompactCardStyle}" Margin="0,16,0,0">
+            <StackPanel>
+              <TextBlock
+                Text="Keyboard Mapping"
+                Style="{StaticResource SectionTitleStyle}"
+                Margin="0,0,0,12"
+              />
+
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="16" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                  <Border Style="{StaticResource CompactInfoPanelStyle}">
+                    <StackPanel>
+                      <TextBlock Text="Sticks" Style="{StaticResource MappingGroupTitleStyle}" />
+                      <TextBlock
+                        Text="Left stick: WASD"
+                        Style="{StaticResource MappingTextStyle}"
+                      />
+                      <TextBlock
+                        Margin="0,4,0,0"
+                        Text="Right stick: IJKL"
+                        Style="{StaticResource MappingTextStyle}"
+                      />
+                    </StackPanel>
+                  </Border>
+
+                  <Border Style="{StaticResource CompactInfoPanelStyle}" Margin="0">
+                    <StackPanel>
+                      <TextBlock
+                        Text="Face Buttons"
+                        Style="{StaticResource MappingGroupTitleStyle}"
+                      />
+                      <TextBlock
+                        Text="X: 1    Y: 2    A: 3    B: 4"
+                        Style="{StaticResource MappingTextStyle}"
+                      />
+                      <TextBlock
+                        Margin="0,4,0,0"
+                        Text="Stick click: LeftShift / RightShift"
+                        Style="{StaticResource MappingTextStyle}"
+                      />
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2">
+                  <Border Style="{StaticResource CompactInfoPanelStyle}">
+                    <StackPanel>
+                      <TextBlock
+                        Text="Trigger And Grip"
+                        Style="{StaticResource MappingGroupTitleStyle}"
+                      />
+                      <TextBlock
+                        Text="Left trigger / grip: Q / E"
+                        Style="{StaticResource MappingTextStyle}"
+                      />
+                      <TextBlock
+                        Margin="0,4,0,0"
+                        Text="Right trigger / grip: U / O"
+                        Style="{StaticResource MappingTextStyle}"
+                      />
+                    </StackPanel>
+                  </Border>
+
+                  <Border Style="{StaticResource CompactInfoPanelStyle}" Margin="0">
+                    <StackPanel>
+                      <TextBlock Text="HMD" Style="{StaticResource MappingGroupTitleStyle}" />
+                      <TextBlock
+                        Text="Yaw and pitch: Arrow keys"
+                        Style="{StaticResource MappingTextStyle}"
+                      />
+                      <TextBlock
+                        Margin="0,4,0,0"
+                        Text="Roll: PageUp / PageDown"
+                        Style="{StaticResource MappingTextStyle}"
+                      />
+                      <TextBlock
+                        Margin="0,4,0,0"
+                        Text="Position X / Y / Z: F-H / T-G / R-V"
+                        Style="{StaticResource MappingTextStyle}"
+                      />
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+          </ui:Card>
         </Grid>
       </Grid>
     </ScrollViewer>

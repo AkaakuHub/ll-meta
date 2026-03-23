@@ -40,7 +40,7 @@ public sealed unsafe partial class OpenXrControllerInputService
 
             var previousState = _sessionState;
             _sessionState = stateChanged.State;
-            _logger?.Info(
+            _logger?.Debug(
                 $"OpenXR session state changed: {previousState} -> {_sessionState} running={_isSessionRunning}"
             );
             if (_sessionState == SessionState.Ready)
@@ -52,7 +52,7 @@ public sealed unsafe partial class OpenXrControllerInputService
                 };
                 var beginResult = _xr.BeginSession(_session, ref beginInfo);
                 _isSessionRunning = beginResult == Result.Success;
-                _logger?.Info(
+                _logger?.Debug(
                     $"OpenXR begin session result: {beginResult} running={_isSessionRunning}"
                 );
             }
@@ -60,7 +60,7 @@ public sealed unsafe partial class OpenXrControllerInputService
             {
                 _ = _xr.EndSession(_session);
                 _isSessionRunning = false;
-                _logger?.Info("OpenXR end session requested due to Stopping state.");
+                _logger?.Debug("OpenXR end session requested due to Stopping state.");
             }
             else if (
                 _sessionState == SessionState.Exiting

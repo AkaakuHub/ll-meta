@@ -10,6 +10,7 @@ public sealed class MainViewModel : ViewModelBase
 {
     private readonly AppLogger _logger;
     private readonly RelayCommand _applyInputTcpPortCommand;
+    private readonly RelayCommand _applyLogLevelCommand;
 
     private string _statusMessage = "Ready";
     private string _openXrInputStatus = "OpenXR input: not initialized";
@@ -25,6 +26,8 @@ public sealed class MainViewModel : ViewModelBase
     private string _windowsInputTcpPort = string.Empty;
     private string _activeWindowsInputTcpPort = string.Empty;
     private int _appliedWindowsInputTcpPort;
+    private AppLogLevel _logLevel;
+    private AppLogLevel _appliedLogLevel;
     private string _captureStatus = "Capture: not selected";
     private OpenXrControllerState _currentOpenXrState;
 
@@ -36,12 +39,16 @@ public sealed class MainViewModel : ViewModelBase
         _activeWindowsInputTcpPort = settings.WindowsInputTcpPort.ToString(
             CultureInfo.InvariantCulture
         );
+        _appliedLogLevel = settings.LogLevel;
+        _logLevel = settings.LogLevel;
 
         _applyInputTcpPortCommand = new RelayCommand(
             _ => ApplyInputTcpPort(),
             _ => CanApplyInputTcpPort()
         );
+        _applyLogLevelCommand = new RelayCommand(_ => ApplyLogLevel(), _ => CanApplyLogLevel());
         ApplyInputTcpPortCommand = _applyInputTcpPortCommand;
+        ApplyLogLevelCommand = _applyLogLevelCommand;
         ReinitializeOpenXrCommand = new RelayCommand(_ => RequestReinitializeOpenXr());
         SelectCaptureTargetCommand = new RelayCommand(_ => RequestSelectCaptureTarget());
     }
@@ -83,11 +90,13 @@ public sealed class MainViewModel : ViewModelBase
     }
 
     public ICommand ApplyInputTcpPortCommand { get; }
+    public ICommand ApplyLogLevelCommand { get; }
     public ICommand ReinitializeOpenXrCommand { get; }
     public ICommand SelectCaptureTargetCommand { get; }
 
     public event Action? OpenXrReinitializeRequested;
     public event Action<int>? InputTcpPortApplyRequested;
+    public event Action<AppLogLevel>? LogLevelApplyRequested;
     public event Action? CaptureTargetSelectionRequested;
 
     public string BridgeStatus
@@ -136,6 +145,18 @@ public sealed class MainViewModel : ViewModelBase
         private set => SetProperty(ref _activeWindowsInputTcpPort, value);
     }
 
+    public Array AvailableLogLevels => Enum.GetValues<AppLogLevel>();
+
+    public AppLogLevel LogLevel
+    {
+        get => _logLevel;
+        set
+        {
+            SetProperty(ref _logLevel, value);
+            _applyLogLevelCommand.RaiseCanExecuteChanged();
+        }
+    }
+
     public string CaptureStatus
     {
         get => _captureStatus;
@@ -181,6 +202,13 @@ public sealed class MainViewModel : ViewModelBase
         _applyInputTcpPortCommand.RaiseCanExecuteChanged();
     }
 
+    public void SetLogLevelForDisplay(AppLogLevel logLevel)
+    {
+        _appliedLogLevel = logLevel;
+        LogLevel = logLevel;
+        _applyLogLevelCommand.RaiseCanExecuteChanged();
+    }
+
     private void ApplyInputTcpPort()
     {
         if (
@@ -207,6 +235,12 @@ public sealed class MainViewModel : ViewModelBase
         InputTcpPortApplyRequested?.Invoke(port);
     }
 
+    private void ApplyLogLevel()
+    {
+        _logger.Info($"Log level apply requested: {LogLevel}");
+        LogLevelApplyRequested?.Invoke(LogLevel);
+    }
+
     private bool CanApplyInputTcpPort()
     {
         if (
@@ -227,6 +261,11 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         return port != _appliedWindowsInputTcpPort;
+    }
+
+    private bool CanApplyLogLevel()
+    {
+        return LogLevel != _appliedLogLevel;
     }
 
     private static string ToOnOff(bool value)

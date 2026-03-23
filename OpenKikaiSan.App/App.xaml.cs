@@ -16,7 +16,7 @@ public partial class App : System.Windows.Application
     private const int DefaultWindowsInputTcpPort = 39200;
     private const string EmulatorRouteHint = " (A-1: Android -> 10.0.2.2)";
     private const string OpenXrUnavailableReason =
-        "OpenXR is not initialized. Click Reinitialize OpenXR or enable keyboard debug input.";
+        "Not active. Refresh OpenXR or enable keyboard debug input.";
     private const string WaitingVideoStatus = "Video: waiting capture frame";
 
     private OpenXrControllerInputService? _openXrControllerInputService;
@@ -64,7 +64,7 @@ public partial class App : System.Windows.Application
         {
             DispatcherUnhandledException += (_, args) =>
             {
-                logger.Error("DispatcherUnhandledException", args.Exception);
+                logger.Fatal("DispatcherUnhandledException", args.Exception);
                 System.Windows.MessageBox.Show(args.Exception.Message, "OpenKikaiSan Error");
                 args.Handled = true;
             };
@@ -73,18 +73,20 @@ public partial class App : System.Windows.Application
             {
                 if (args.ExceptionObject is Exception ex)
                 {
-                    logger.Error("UnhandledException", ex);
+                    logger.Fatal("UnhandledException", ex);
                 }
             };
 
             TaskScheduler.UnobservedTaskException += (_, args) =>
             {
-                logger.Error("UnobservedTaskException", args.Exception);
+                logger.Fatal("UnobservedTaskException", args.Exception);
                 args.SetObserved();
             };
 
             var settingsStore = new SettingsStore(logger);
             var settings = settingsStore.Load();
+            logger.SetMinimumLevel(settings.LogLevel);
+            logger.Info($"Logger minimum level: {settings.LogLevel}");
             var captureTargetRestoreService = new CaptureTargetRestoreService(logger);
             var mainViewModel = new MainViewModel(settings, logger);
             var inputTcpPort = ResolveValidWindowsInputTcpPort(settings.WindowsInputTcpPort);
@@ -95,6 +97,7 @@ public partial class App : System.Windows.Application
             }
 
             mainViewModel.SetInputTcpPortForDisplay(inputTcpPort);
+            mainViewModel.SetLogLevelForDisplay(settings.LogLevel);
             mainViewModel.OpenXrReinitializeRequested += () =>
             {
                 StopRealtimeLoops();
@@ -131,6 +134,14 @@ public partial class App : System.Windows.Application
                     allowAutomaticFallback: false,
                     promptForAutomaticFallback: true
                 );
+            };
+            mainViewModel.LogLevelApplyRequested += logLevel =>
+            {
+                settings.LogLevel = logLevel;
+                settingsStore.Save(settings);
+                logger.SetMinimumLevel(logLevel);
+                mainViewModel.SetLogLevelForDisplay(logLevel);
+                mainViewModel.StatusMessage = $"Log level applied: {logLevel}";
             };
             mainViewModel.CaptureTargetSelectionRequested += async () =>
             {
@@ -270,7 +281,7 @@ public partial class App : System.Windows.Application
                     if (_lastOpenXrStatus != stateSnapshot.Status)
                     {
                         _lastOpenXrStatus = stateSnapshot.Status;
-                        logger.Info($"OpenXR input state: {stateSnapshot.Status}");
+                        logger.Debug($"OpenXR input state: {stateSnapshot.Status}");
                     }
 
                     MaybeLogVideoLoopStall(logger);
@@ -285,7 +296,7 @@ public partial class App : System.Windows.Application
         }
         catch (Exception ex)
         {
-            logger.Error("Startup failed.", ex);
+            logger.Fatal("Startup failed.", ex);
             System.Windows.MessageBox.Show(ex.Message, "OpenKikaiSan Error");
             Shutdown();
         }

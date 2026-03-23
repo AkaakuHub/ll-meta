@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using OpenKikaiSan.App.Models;
 using OpenKikaiSan.App.Utils;
 
@@ -8,7 +9,11 @@ namespace OpenKikaiSan.App.Stores;
 public sealed class SettingsStore
 {
     private readonly AppLogger _logger;
-    private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
+    private readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() },
+    };
 
     public SettingsStore(AppLogger logger)
     {

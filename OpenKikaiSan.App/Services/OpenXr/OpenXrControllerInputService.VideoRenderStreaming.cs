@@ -626,7 +626,7 @@ public sealed unsafe partial class OpenXrControllerInputService
             );
             if (createResult < 0 || _blackClearTexture is null)
             {
-                _logger?.Info(
+                _logger?.Debug(
                     $"White clear texture creation failed: hr=0x{createResult:X8} size={width}x{height} fmt={(int)format} normalizedFmt={(int)clearFormat}"
                 );
                 return false;
@@ -766,7 +766,7 @@ public sealed unsafe partial class OpenXrControllerInputService
             );
             if (createResult < 0 || _placeholderTexture is null)
             {
-                _logger?.Info(
+                _logger?.Debug(
                     $"Placeholder texture creation failed: hr=0x{createResult:X8} size={width}x{height} fmt={(int)format} normalizedFmt={(int)placeholderFormat}"
                 );
                 return false;
@@ -1626,7 +1626,7 @@ public sealed unsafe partial class OpenXrControllerInputService
             _lastVideoProcessorFailureDetail = detail;
         }
 
-        _logger.Info($"VideoProcessor setup failed: {detail}");
+        _logger.Debug($"VideoProcessor setup failed: {detail}");
     }
 
     private void ReleaseVideoProcessorInputView()

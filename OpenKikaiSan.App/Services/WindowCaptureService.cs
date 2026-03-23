@@ -88,7 +88,7 @@ public sealed class WindowCaptureService : IDisposable
 
         if (logMessage is not null)
         {
-            _logger.Info(logMessage);
+            _logger.Debug(logMessage);
         }
 
         if (restartItem is not null)
@@ -153,7 +153,7 @@ public sealed class WindowCaptureService : IDisposable
             if (_captureDevice is null)
             {
                 _statusText = "Capture: D3D11 device unavailable";
-                _logger.Info(
+                _logger.Warn(
                     $"Window capture start blocked: D3D11 device unavailable. target={item.DisplayName} pointer=0x{_d3d11DevicePointer:X16}"
                 );
                 return false;
@@ -255,7 +255,7 @@ public sealed class WindowCaptureService : IDisposable
             if (!_loggedFirstFrame)
             {
                 _loggedFirstFrame = true;
-                _logger.Info(
+                _logger.Debug(
                     $"Window capture first frame: target={_captureItem?.DisplayName ?? "unknown"} size={contentSize.Width}x{contentSize.Height}"
                 );
             }

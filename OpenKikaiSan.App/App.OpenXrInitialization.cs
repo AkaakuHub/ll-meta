@@ -13,7 +13,14 @@ public partial class App
 
         var openXrControllerInputService = new OpenXrControllerInputService(logger);
         var initializeState = openXrControllerInputService.Initialize();
-        logger.Info($"OpenXR input initialize: {initializeState.Status}");
+        if (initializeState.IsInitialized)
+        {
+            logger.Info($"OpenXR input initialize: {initializeState.Status}");
+        }
+        else
+        {
+            logger.Warn($"OpenXR input initialize failed: {initializeState.Status}");
+        }
 
         if (initializeState.IsInitialized)
         {

@@ -89,23 +89,10 @@ public partial class OpenXrSceneView : UserControl
         new PropertyMetadata(default(OpenXrControllerState), OnStateChanged)
     );
 
-    public static readonly DependencyProperty StatusTextProperty = DependencyProperty.Register(
-        nameof(StatusText),
-        typeof(string),
-        typeof(OpenXrSceneView),
-        new PropertyMetadata(string.Empty)
-    );
-
     public OpenXrControllerState State
     {
         get => (OpenXrControllerState)GetValue(StateProperty);
         set => SetValue(StateProperty, value);
-    }
-
-    public string StatusText
-    {
-        get => (string)GetValue(StatusTextProperty);
-        set => SetValue(StatusTextProperty, value);
     }
 
     private static void OnStateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -118,7 +105,7 @@ public partial class OpenXrSceneView : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _logger.Info(
+        _logger.Debug(
             $"OpenXrSceneView loaded. ready={_isSceneReady} visible={IsVisible} width={ActualWidth:F0} height={ActualHeight:F0}"
         );
         ScheduleSceneInitialization();
@@ -126,7 +113,7 @@ public partial class OpenXrSceneView : UserControl
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        _logger.Info("OpenXrSceneView unloaded. Resetting scene state.");
+        _logger.Debug("OpenXrSceneView unloaded. Resetting scene state.");
         ResetSceneState();
     }
 
@@ -181,7 +168,7 @@ public partial class OpenXrSceneView : UserControl
 
         if (ActualWidth <= 0 || ActualHeight <= 0)
         {
-            _logger.Info(
+            _logger.Debug(
                 $"OpenXrSceneView initialization deferred. width={ActualWidth:F0} height={ActualHeight:F0}"
             );
             ScheduleSceneInitialization();
@@ -190,7 +177,7 @@ public partial class OpenXrSceneView : UserControl
 
         try
         {
-            _logger.Info(
+            _logger.Debug(
                 $"OpenXrSceneView initializing scene. width={ActualWidth:F0} height={ActualHeight:F0}"
             );
             LoadScene();
@@ -203,7 +190,7 @@ public partial class OpenXrSceneView : UserControl
                     try
                     {
                         Viewport.InvalidateRender();
-                        _logger.Info("OpenXrSceneView render invalidated after camera reset.");
+                        _logger.Debug("OpenXrSceneView render invalidated after camera reset.");
                     }
                     catch (Exception ex)
                     {
@@ -211,7 +198,7 @@ public partial class OpenXrSceneView : UserControl
                     }
                 })
             );
-            _logger.Info("OpenXrSceneView scene initialized.");
+            _logger.Debug("OpenXrSceneView scene initialized.");
         }
         catch (Exception ex)
         {
@@ -243,7 +230,7 @@ public partial class OpenXrSceneView : UserControl
             camera.Position = DefaultCameraPosition;
             camera.LookDirection = DefaultCameraLookDirection;
             camera.UpDirection = DefaultCameraUpDirection;
-            _logger.Info("OpenXrSceneView camera reset applied.");
+            _logger.Debug("OpenXrSceneView camera reset applied.");
         }
     }
 
