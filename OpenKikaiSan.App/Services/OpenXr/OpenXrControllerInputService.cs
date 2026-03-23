@@ -38,22 +38,8 @@ public sealed unsafe partial class OpenXrControllerInputService : IDisposable
     private string _bindingSupportSummary = string.Empty;
     private readonly AppLogger? _logger;
 
-    public OpenXrControllerInputService(
-        string preferredSwapchainFormat = "Auto",
-        string preferredGraphicsAdapter = "Auto",
-        string preferredGraphicsBackend = "D3D11",
-        AppLogger? logger = null
-    )
+    public OpenXrControllerInputService(AppLogger? logger = null)
     {
-        _requestedSwapchainFormatLabel = NormalizePreferredSwapchainFormat(
-            preferredSwapchainFormat
-        );
-        _requestedGraphicsAdapterLabel = NormalizePreferredGraphicsAdapter(
-            preferredGraphicsAdapter
-        );
-        _requestedGraphicsBackendLabel = NormalizePreferredGraphicsBackend(
-            preferredGraphicsBackend
-        );
         _logger = logger;
     }
 
@@ -72,15 +58,9 @@ public sealed unsafe partial class OpenXrControllerInputService : IDisposable
         lock (_videoFrameLock)
         {
             return new OpenXrVideoRenderConfigState(
-                _requestedSwapchainFormatLabel,
                 _selectedSwapchainFormatLabel,
-                _availableSwapchainFormatLabels.ToArray(),
-                _requestedGraphicsAdapterLabel,
                 _selectedGraphicsAdapterLabel,
-                _availableGraphicsAdapterLabels.ToArray(),
-                _requestedGraphicsBackendLabel,
                 _selectedGraphicsBackendLabel,
-                _availableGraphicsBackends.ToArray(),
                 _videoProcessorProbeSummary
             );
         }

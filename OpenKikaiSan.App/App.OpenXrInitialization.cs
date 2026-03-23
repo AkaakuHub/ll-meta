@@ -6,22 +6,12 @@ namespace OpenKikaiSan.App;
 
 public partial class App
 {
-    private OpenXrControllerState ReinitializeOpenXr(
-        AppLogger logger,
-        string preferredSwapchainFormat,
-        string preferredGraphicsAdapter,
-        string preferredGraphicsBackend
-    )
+    private OpenXrControllerState ReinitializeOpenXr(AppLogger logger)
     {
         _openXrControllerInputService?.Dispose();
         _openXrControllerInputService = null;
 
-        var openXrControllerInputService = new OpenXrControllerInputService(
-            preferredSwapchainFormat,
-            preferredGraphicsAdapter,
-            preferredGraphicsBackend,
-            logger
-        );
+        var openXrControllerInputService = new OpenXrControllerInputService(logger);
         var initializeState = openXrControllerInputService.Initialize();
         logger.Info($"OpenXR input initialize: {initializeState.Status}");
 

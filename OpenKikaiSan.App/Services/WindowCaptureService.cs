@@ -57,6 +57,7 @@ public sealed class WindowCaptureService : IDisposable
     public void SetD3D11DevicePointer(nint d3d11DevicePointer)
     {
         GraphicsCaptureItem? restartItem = null;
+        string? logMessage = null;
         lock (_lock)
         {
             if (_d3d11DevicePointer == d3d11DevicePointer)
@@ -65,8 +66,29 @@ public sealed class WindowCaptureService : IDisposable
             }
 
             _d3d11DevicePointer = d3d11DevicePointer;
-            _captureDevice = CreateCaptureDevice(d3d11DevicePointer);
+            try
+            {
+                _captureDevice = CreateCaptureDevice(d3d11DevicePointer);
+                logMessage =
+                    d3d11DevicePointer == IntPtr.Zero
+                        ? "Window capture D3D11 device cleared because OpenXR device pointer is zero."
+                        : $"Window capture D3D11 device updated. pointer=0x{d3d11DevicePointer:X16}";
+            }
+            catch (Exception ex)
+            {
+                _captureDevice = null;
+                _statusText = "Capture: D3D11 device unavailable";
+                _logger.Error(
+                    $"Window capture D3D11 device creation failed. pointer=0x{d3d11DevicePointer:X16}",
+                    ex
+                );
+            }
             restartItem = _captureSession is not null ? _captureItem : null;
+        }
+
+        if (logMessage is not null)
+        {
+            _logger.Info(logMessage);
         }
 
         if (restartItem is not null)
@@ -131,6 +153,9 @@ public sealed class WindowCaptureService : IDisposable
             if (_captureDevice is null)
             {
                 _statusText = "Capture: D3D11 device unavailable";
+                _logger.Info(
+                    $"Window capture start blocked: D3D11 device unavailable. target={item.DisplayName} pointer=0x{_d3d11DevicePointer:X16}"
+                );
                 return false;
             }
 

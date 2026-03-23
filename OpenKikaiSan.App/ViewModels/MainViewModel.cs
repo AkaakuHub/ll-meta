@@ -151,10 +151,9 @@ public sealed class MainViewModel : ViewModelBase
     public void UpdateVideoRenderConfig(OpenXrVideoRenderConfigState config, int lastFailureCode)
     {
         VideoRenderConfigStatus =
-            $"Video render config: requested={config.RequestedSwapchainFormat} "
-            + $"selected={config.SelectedSwapchainFormat} "
-            + $"adapter={config.SelectedGraphicsAdapter} "
-            + $"backend={config.SelectedGraphicsBackend} "
+            $"Video render config: swapchain={config.SelectedSwapchainFormat} "
+            + $"runtimeAdapter={config.RuntimeGraphicsAdapter} "
+            + $"backend={config.GraphicsBackend} "
             + $"probe={config.ProbeSummary}";
         VideoRenderErrorStatus = BuildVideoRenderErrorStatus(lastFailureCode, VideoStatus);
     }

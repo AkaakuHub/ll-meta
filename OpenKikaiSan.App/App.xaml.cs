@@ -98,12 +98,7 @@ public partial class App : System.Windows.Application
             mainViewModel.OpenXrReinitializeRequested += () =>
             {
                 StopRealtimeLoops();
-                var reinitializeState = ReinitializeOpenXr(
-                    logger,
-                    settings.PreferredSwapchainFormat,
-                    settings.PreferredGraphicsAdapter,
-                    settings.PreferredGraphicsBackend
-                );
+                var reinitializeState = ReinitializeOpenXr(logger);
                 lock (_runtimeStateLock)
                 {
                     _latestOpenXrState = reinitializeState;
@@ -200,12 +195,7 @@ public partial class App : System.Windows.Application
             ResetVideoPipelineMetrics();
             mainViewModel.VideoStatus = WaitingVideoStatus;
 
-            var initializeState = ReinitializeOpenXr(
-                logger,
-                settings.PreferredSwapchainFormat,
-                settings.PreferredGraphicsAdapter,
-                settings.PreferredGraphicsBackend
-            );
+            var initializeState = ReinitializeOpenXr(logger);
             mainViewModel.UpdateOpenXrControllerState(initializeState);
             lock (_runtimeStateLock)
             {

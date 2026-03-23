@@ -43,16 +43,10 @@ public sealed unsafe partial class OpenXrControllerInputService
     private ulong _requiredGraphicsAdapterLuid;
     private bool _hasRequiredGraphicsAdapterLuid;
     private string _graphicsAdapterSummary = string.Empty;
-    private string _requestedSwapchainFormatLabel = "Auto";
     private string _selectedSwapchainFormatLabel = "unselected";
     private string _videoProcessorProbeSummary = "not-probed";
-    private List<string> _availableSwapchainFormatLabels = ["Auto", "RGBA8", "BGRA8"];
-    private string _requestedGraphicsAdapterLabel = "Auto";
     private string _selectedGraphicsAdapterLabel = "unselected";
-    private List<string> _availableGraphicsAdapterLabels = ["Auto"];
-    private string _requestedGraphicsBackendLabel = "D3D11";
     private string _selectedGraphicsBackendLabel = "unselected";
-    private List<string> _availableGraphicsBackends = ["D3D11"];
 
     private ID3D11VideoDevice* _d3d11VideoDevice;
     private ID3D11VideoContext* _d3d11VideoContext;
@@ -198,18 +192,6 @@ public sealed unsafe partial class OpenXrControllerInputService
         _swapchainFormatSummary =
             "available="
             + string.Join(", ", formats.Select(static format => DescribeSwapchainFormat(format)));
-        lock (_videoFrameLock)
-        {
-            _availableSwapchainFormatLabels = ["Auto"];
-            if (formats.Any(static format => IsRgbaFamilyFormat(format)))
-            {
-                _availableSwapchainFormatLabels.Add("RGBA8");
-            }
-            if (formats.Any(static format => IsBgraFamilyFormat(format)))
-            {
-                _availableSwapchainFormatLabels.Add("BGRA8");
-            }
-        }
         if (_graphicsAdapterSummary.Length > 0)
         {
             _swapchainFormatSummary = $"{_swapchainFormatSummary}, {_graphicsAdapterSummary}";
@@ -452,10 +434,7 @@ public sealed unsafe partial class OpenXrControllerInputService
             return false;
         }
 
-        candidateFormats = SortFormatsByUserPreference(
-            candidateFormats,
-            _requestedSwapchainFormatLabel
-        );
+        candidateFormats = SortFormatsByPriority(candidateFormats);
         var usageCandidates = new[] { VideoUsage.OptimalSpeed, (VideoUsage)0, (VideoUsage)2 };
         foreach (var usage in usageCandidates.Distinct())
         {
@@ -600,52 +579,9 @@ public sealed unsafe partial class OpenXrControllerInputService
         }
     }
 
-    private static List<long> SortFormatsByUserPreference(
-        List<long> formats,
-        string requestedSwapchainFormat
-    )
+    private static List<long> SortFormatsByPriority(List<long> formats)
     {
-        var requested = NormalizePreferredSwapchainFormat(requestedSwapchainFormat);
-        if (requested.Equals("RGBA8", StringComparison.OrdinalIgnoreCase))
-        {
-            return formats.Where(static format => IsRgbaFamilyFormat(format)).ToList();
-        }
-
-        if (requested.Equals("BGRA8", StringComparison.OrdinalIgnoreCase))
-        {
-            return formats.Where(static format => IsBgraFamilyFormat(format)).ToList();
-        }
-
         return formats.OrderBy(static format => GetAutoSwapchainFormatPriority(format)).ToList();
-    }
-
-    private static string NormalizePreferredSwapchainFormat(string? preferredSwapchainFormat)
-    {
-        if (string.IsNullOrWhiteSpace(preferredSwapchainFormat))
-        {
-            return "Auto";
-        }
-
-        var normalized = preferredSwapchainFormat.Trim();
-        if (
-            normalized.Equals("R8G8B8A8_UNORM", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("R8G8B8A8_UNORM_SRGB", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("RGBA8", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return "RGBA8";
-        }
-
-        if (
-            normalized.Equals("B8G8R8A8_UNORM", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("B8G8R8A8_UNORM_SRGB", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("BGRA8", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return "BGRA8";
-        }
-
-        return "Auto";
     }
 
     private static string ToUiSwapchainLabel(long format)
@@ -701,32 +637,5 @@ public sealed unsafe partial class OpenXrControllerInputService
         }
 
         return int.MaxValue;
-    }
-
-    private static string NormalizePreferredGraphicsAdapter(string? preferredGraphicsAdapter)
-    {
-        if (string.IsNullOrWhiteSpace(preferredGraphicsAdapter))
-        {
-            return "Auto";
-        }
-
-        var normalized = preferredGraphicsAdapter.Trim();
-        return normalized;
-    }
-
-    private static string NormalizePreferredGraphicsBackend(string? preferredGraphicsBackend)
-    {
-        if (string.IsNullOrWhiteSpace(preferredGraphicsBackend))
-        {
-            return "D3D11";
-        }
-
-        var normalized = preferredGraphicsBackend.Trim();
-        if (normalized.Equals("D3D11", StringComparison.OrdinalIgnoreCase))
-        {
-            return "D3D11";
-        }
-
-        return "D3D11";
     }
 }

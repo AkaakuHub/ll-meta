@@ -56,16 +56,8 @@ public sealed unsafe partial class OpenXrControllerInputService
 
     private int CreateD3D11Device()
     {
-        if (!_requestedGraphicsBackendLabel.Equals("D3D11", StringComparison.OrdinalIgnoreCase))
-        {
-            _graphicsAdapterSummary =
-                $"backend-not-supported requested={_requestedGraphicsBackendLabel}";
-            return unchecked((int)0x80070057);
-        }
-
         lock (_videoFrameLock)
         {
-            _availableGraphicsBackends = ["D3D11"];
             _selectedGraphicsBackendLabel = "D3D11";
         }
 
@@ -76,7 +68,6 @@ public sealed unsafe partial class OpenXrControllerInputService
         ID3D11DeviceContext* d3d11DeviceContext = null;
         IDXGIFactory1* dxgiFactory = null;
         IDXGIAdapter1* selectedAdapter = null;
-        ulong requestedAdapterLuid = _requiredGraphicsAdapterLuid;
 
         if (!_hasRequiredGraphicsAdapterLuid)
         {
@@ -94,15 +85,7 @@ public sealed unsafe partial class OpenXrControllerInputService
             }
 
             dxgiFactory = (IDXGIFactory1*)factoryPointer;
-            requestedAdapterLuid = ParsePreferredAdapterLuidOrDefault(
-                _requestedGraphicsAdapterLabel,
-                _requiredGraphicsAdapterLuid
-            );
             var targetAdapterLuid = _requiredGraphicsAdapterLuid;
-            lock (_videoFrameLock)
-            {
-                _availableGraphicsAdapterLabels = ["Auto"];
-            }
             for (uint adapterIndex = 0; ; adapterIndex++)
             {
                 IDXGIAdapter1* adapter = null;
@@ -122,17 +105,12 @@ public sealed unsafe partial class OpenXrControllerInputService
                 {
                     var adapterLuid = ConvertLuidToUInt64(adapterDesc.AdapterLuid);
                     var adapterLabel = BuildAdapterLabel(adapterDesc, adapterLuid, adapterIndex);
-                    lock (_videoFrameLock)
-                    {
-                        _availableGraphicsAdapterLabels.Add(adapterLabel);
-                    }
 
                     if (adapterLuid == targetAdapterLuid)
                     {
                         selectedAdapter = adapter;
-                        var requestedIgnored = requestedAdapterLuid != targetAdapterLuid;
                         _graphicsAdapterSummary =
-                            $"requiredLuid=0x{_requiredGraphicsAdapterLuid:X16} selectedAdapterIndex={adapterIndex} requestedLuid=0x{requestedAdapterLuid:X16} requestedIgnored={requestedIgnored}";
+                            $"requiredLuid=0x{_requiredGraphicsAdapterLuid:X16} selectedAdapterIndex={adapterIndex}";
                         _selectedGraphicsAdapterLabel = adapterLabel;
                         break;
                     }
@@ -152,7 +130,7 @@ public sealed unsafe partial class OpenXrControllerInputService
         if (selectedAdapter is null)
         {
             _graphicsAdapterSummary =
-                $"adapter-not-found requested={_requestedGraphicsAdapterLabel} requestedLuid=0x{requestedAdapterLuid:X16} requiredLuid=0x{_requiredGraphicsAdapterLuid:X16}";
+                $"adapter-not-found requiredLuid=0x{_requiredGraphicsAdapterLuid:X16}";
             return DxgiErrorNotFound;
         }
 
@@ -217,64 +195,6 @@ public sealed unsafe partial class OpenXrControllerInputService
         luidSpan[0] = luid;
         var bytes = MemoryMarshal.AsBytes(luidSpan);
         return BitConverter.ToUInt64(bytes);
-    }
-
-    private static ulong ParsePreferredAdapterLuidOrDefault(
-        string requestedAdapter,
-        ulong fallbackLuid
-    )
-    {
-        if (
-            string.IsNullOrWhiteSpace(requestedAdapter)
-            || requestedAdapter.Equals("Auto", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return fallbackLuid;
-        }
-
-        var normalized = requestedAdapter.Trim();
-        var marker = "LUID=0x";
-        var markerIndex = normalized.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (markerIndex >= 0)
-        {
-            var hexStart = markerIndex + marker.Length;
-            var hexEnd = normalized.IndexOfAny([' ', '|'], hexStart);
-            var hexLength = (hexEnd >= 0 ? hexEnd : normalized.Length) - hexStart;
-            if (hexLength > 0)
-            {
-                var hexToken = normalized.Substring(hexStart, hexLength);
-                if (
-                    ulong.TryParse(
-                        hexToken,
-                        System.Globalization.NumberStyles.HexNumber,
-                        null,
-                        out var parsedFromLabel
-                    )
-                )
-                {
-                    return parsedFromLabel;
-                }
-            }
-        }
-
-        if (normalized.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-        {
-            normalized = normalized[2..];
-        }
-
-        if (
-            ulong.TryParse(
-                normalized,
-                System.Globalization.NumberStyles.HexNumber,
-                null,
-                out var parsed
-            )
-        )
-        {
-            return parsed;
-        }
-
-        return fallbackLuid;
     }
 
     private static string BuildAdapterLabel(
