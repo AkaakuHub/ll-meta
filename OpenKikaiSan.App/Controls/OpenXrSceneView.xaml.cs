@@ -106,15 +106,11 @@ public partial class OpenXrSceneView : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _logger.Debug(
-            $"OpenXrSceneView loaded. ready={_isSceneReady} visible={IsVisible} width={ActualWidth:F0} height={ActualHeight:F0}"
-        );
         ScheduleSceneInitialization();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        _logger.Debug("OpenXrSceneView unloaded. Resetting scene state.");
         ResetSceneState();
     }
 
@@ -169,18 +165,12 @@ public partial class OpenXrSceneView : UserControl
 
         if (ActualWidth <= 0 || ActualHeight <= 0)
         {
-            _logger.Debug(
-                $"OpenXrSceneView initialization deferred. width={ActualWidth:F0} height={ActualHeight:F0}"
-            );
             ScheduleSceneInitialization();
             return;
         }
 
         try
         {
-            _logger.Debug(
-                $"OpenXrSceneView initializing scene. width={ActualWidth:F0} height={ActualHeight:F0}"
-            );
             LoadScene();
             ApplyState(State);
             ResetCamera();
@@ -191,7 +181,6 @@ public partial class OpenXrSceneView : UserControl
                     try
                     {
                         Viewport.InvalidateRender();
-                        _logger.Debug("OpenXrSceneView render invalidated after camera reset.");
                     }
                     catch (Exception ex)
                     {
@@ -199,7 +188,6 @@ public partial class OpenXrSceneView : UserControl
                     }
                 })
             );
-            _logger.Debug("OpenXrSceneView scene initialized.");
         }
         catch (Exception ex)
         {
@@ -231,7 +219,6 @@ public partial class OpenXrSceneView : UserControl
             camera.Position = DefaultCameraPosition;
             camera.LookDirection = DefaultCameraLookDirection;
             camera.UpDirection = DefaultCameraUpDirection;
-            _logger.Debug("OpenXrSceneView camera reset applied.");
         }
     }
 

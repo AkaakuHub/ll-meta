@@ -17,8 +17,6 @@ public partial class App
                     _latestVideoStatus =
                         _windowCaptureService?.GetStatusText() ?? WaitingVideoStatus;
                 }
-
-                MaybeLogCaptureRenderStats(logger);
                 await Task.Delay(100, token);
             }
             catch (OperationCanceledException)
@@ -40,60 +38,10 @@ public partial class App
         }
     }
 
-    private void MaybeLogCaptureRenderStats(AppLogger logger)
-    {
-        var now = DateTimeOffset.UtcNow;
-        lock (_runtimeStateLock)
-        {
-            if (
-                _lastVideoPipelineLogAt != DateTimeOffset.MinValue
-                && (now - _lastVideoPipelineLogAt).TotalSeconds < 2
-            )
-            {
-                return;
-            }
-
-            _lastVideoPipelineLogAt = now;
-        }
-
-        var renderStats = _openXrControllerInputService?.GetVideoRenderStatsSnapshot();
-        var captureStatus = _windowCaptureService?.GetStatusText() ?? "Capture: unavailable";
-        logger.Debug(
-            "Capture pipeline stats: "
-                + $"status={captureStatus} "
-                + $"renSeq={(renderStats?.LastRenderedSequence ?? 0)} "
-                + $"renAgeRxMs={(renderStats?.LastRenderedAgeFromReceiveMs ?? 0)} "
-                + $"renAgeDecMs={(renderStats?.LastRenderedAgeFromDecodeMs ?? 0)} "
-                + $"renFail={(renderStats?.LastUploadFailureCode ?? 0)}"
-        );
-    }
-
-    private void MaybeLogVideoLoopStall(AppLogger logger)
-    {
-        var renderStats = _openXrControllerInputService?.GetVideoRenderStatsSnapshot();
-        if (renderStats is null)
-        {
-            return;
-        }
-
-        if (renderStats.Value.LastUploadFailureCode == 0)
-        {
-            return;
-        }
-
-        logger.Debug(
-            "Capture render issue: "
-                + $"renSeq={renderStats.Value.LastRenderedSequence} "
-                + $"renFail={renderStats.Value.LastUploadFailureCode} "
-                + $"status={_windowCaptureService?.GetStatusText() ?? "Capture: unavailable"}"
-        );
-    }
-
     private void ResetVideoPipelineMetrics()
     {
         lock (_runtimeStateLock)
         {
-            _lastVideoPipelineLogAt = DateTimeOffset.MinValue;
             _latestVideoStatus = WaitingVideoStatus;
         }
     }

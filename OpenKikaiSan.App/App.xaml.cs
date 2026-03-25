@@ -31,9 +31,7 @@ public partial class App : System.Windows.Application
     private OpenXrControllerState _latestOpenXrState;
     private string _latestInputSource = "Input source: unavailable";
     private string _latestVideoStatus = WaitingVideoStatus;
-    private string? _lastOpenXrStatus;
     private volatile bool _isKeyboardDebugMode;
-    private DateTimeOffset _lastVideoPipelineLogAt = DateTimeOffset.MinValue;
 
     public App()
     {
@@ -277,14 +275,6 @@ public partial class App : System.Windows.Application
                     {
                         mainViewModel.CaptureStatus = _windowCaptureService.GetStatusText();
                     }
-
-                    if (_lastOpenXrStatus != stateSnapshot.Status)
-                    {
-                        _lastOpenXrStatus = stateSnapshot.Status;
-                        logger.Debug($"OpenXR input state: {stateSnapshot.Status}");
-                    }
-
-                    MaybeLogVideoLoopStall(logger);
                 };
                 _uiTimer.Start();
             }
