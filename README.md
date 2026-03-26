@@ -1,14 +1,28 @@
-[![Platform](https://img.shields.io/badge/platform-Windows-blue)](https://github.com/AkaakuHub/refined-line)
+<p align="center">
+  <img src="./docs/assets/icon.svg" alt="OpenKikaiSan icon" width="160" />
+</p>
 
-[日本語READMEはこちら](./docs/ja/README.md)
+<h1 align="center">OpenKikaiSan</h1>
 
-# OpenKikaiSan
+<p align="center">The client for OpenKikai System.</p>
 
-The client for OpenKikai System.
+<p align="center">
+  <a href="https://github.com/AkaakuHub/refined-line">
+    <img src="https://img.shields.io/badge/platform-Windows-blue" alt="Platform: Windows" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="./docs/ja/README.md">日本語版READMEはこちら</a>
+</p>
+
+# What is OpenKikai System?
+
+OpenKikai System is a term for a lightweight and customizable VR streaming solution designed for fast video transfer. It is built as a thin implementation so developers can adapt, extend, and integrate it for their own environments and use cases.
 
 # Disclaimer
 
-All code and resources included in this repository are published solely for developers' learning and reference purposes. The author makes no warranties of any kind regarding the accuracy, completeness, or fitness of this code or these resources for any particular purpose. The author shall bear no responsibility whatsoever for any direct or indirect consequences, damages, losses, or legal liabilities arising from the use of this code. All risks associated with its use are to be borne solely by the user.
+This repository itself contains original implementation and resources intended for lawful development, learning, and reference purposes. The author is not responsible for any third-party software, applications, content, or environments used together with this repository, including their legality, safety, compatibility, licensing status, or resulting consequences. Users are solely responsible for evaluating and complying with the terms, laws, and risks related to any external tools or services they choose to combine with it.
 
 # Architecture Diagram
 ```mermaid
@@ -42,17 +56,12 @@ flowchart LR
   SC --> |"OpenXR Render Path"| QO
 ```
 
-# Contribution
-
-This project is currently in the alpha stage, so contributions are welcome!
-
 # Development Environment
 
 - Windows 11 26H2
 - Visual Studio Code
 - Meta Quest 3
 
-# Special Thanks
-
-- [linkura-localify](https://github.com/ChocoLZS/linkura-localify)
-
+# Future Plans
+- Support other VR formats
+- Support other connection protocols
