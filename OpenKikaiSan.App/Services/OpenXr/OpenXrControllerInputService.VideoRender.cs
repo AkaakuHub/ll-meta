@@ -83,6 +83,16 @@ public sealed unsafe partial class OpenXrControllerInputService
     private OpenXrVideoRenderStats _videoRenderStats;
     private string _lastVideoProcessorFailureDetail = string.Empty;
 
+    private readonly record struct VideoFrameSnapshot(
+        nint SourceTexturePointer,
+        uint SourceSubresourceIndex,
+        ulong SourceTimestampUnixMs,
+        ulong SourceDecodedUnixMs,
+        int SourceWidth,
+        int SourceVisibleHeight,
+        uint Sequence
+    );
+
     private void ReleaseLatestVideoTexture()
     {
         lock (_videoFrameLock)

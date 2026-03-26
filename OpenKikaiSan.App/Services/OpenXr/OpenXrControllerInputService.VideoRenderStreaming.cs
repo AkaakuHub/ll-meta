@@ -58,86 +58,98 @@ public sealed unsafe partial class OpenXrControllerInputService
         var renderedAgeFromDecodeMs = 0L;
         var firstUploadFailureCode = 0;
         var hasRenderedVideoFrame = false;
+        var sourceFrameSnapshot = AcquireLatestSbsFrameSnapshot();
 
-        for (var eye = 0; eye < StereoViewCount; eye++)
+        try
         {
-            var acquireInfo = new SwapchainImageAcquireInfo
+            for (var eye = 0; eye < StereoViewCount; eye++)
             {
-                Type = StructureType.SwapchainImageAcquireInfo,
-            };
-            uint imageIndex = 0;
-            var acquireResult = _xr.AcquireSwapchainImage(
-                _colorSwapchains[eye],
-                ref acquireInfo,
-                ref imageIndex
-            );
-            if (acquireResult != Result.Success)
-            {
-                return acquireResult;
-            }
-
-            var waitInfo = new SwapchainImageWaitInfo
-            {
-                Type = StructureType.SwapchainImageWaitInfo,
-                Timeout = long.MaxValue,
-            };
-            var waitResult = _xr.WaitSwapchainImage(_colorSwapchains[eye], ref waitInfo);
-            if (waitResult != Result.Success)
-            {
-                return waitResult;
-            }
-
-            var targetTexture = (ID3D11Texture2D*)_swapchainImages[eye][imageIndex].Texture;
-            var eyeHasFrame = UploadEyeTexture(
-                targetTexture,
-                eye,
-                out var sequence,
-                out var ageFromReceiveMs,
-                out var ageFromDecodeMs,
-                out var uploadFailureCode
-            );
-            if (eyeHasFrame && !hasRenderedVideoFrame)
-            {
-                hasRenderedVideoFrame = true;
-                renderedSequence = sequence;
-                renderedAgeFromReceiveMs = ageFromReceiveMs;
-                renderedAgeFromDecodeMs = ageFromDecodeMs;
-            }
-            else if (!eyeHasFrame && firstUploadFailureCode == 0 && uploadFailureCode != 0)
-            {
-                firstUploadFailureCode = uploadFailureCode;
-            }
-
-            var releaseInfo = new SwapchainImageReleaseInfo
-            {
-                Type = StructureType.SwapchainImageReleaseInfo,
-            };
-            var releaseResult = _xr.ReleaseSwapchainImage(_colorSwapchains[eye], ref releaseInfo);
-            if (releaseResult != Result.Success)
-            {
-                return releaseResult;
-            }
-
-            projectionViews[eye] = new CompositionLayerProjectionView
-            {
-                Type = StructureType.CompositionLayerProjectionView,
-                Pose = _views[eye].Pose,
-                Fov = _views[eye].Fov,
-                SubImage = new SwapchainSubImage
+                var acquireInfo = new SwapchainImageAcquireInfo
                 {
-                    Swapchain = _colorSwapchains[eye],
-                    ImageRect = new Rect2Di
+                    Type = StructureType.SwapchainImageAcquireInfo,
+                };
+                uint imageIndex = 0;
+                var acquireResult = _xr.AcquireSwapchainImage(
+                    _colorSwapchains[eye],
+                    ref acquireInfo,
+                    ref imageIndex
+                );
+                if (acquireResult != Result.Success)
+                {
+                    return acquireResult;
+                }
+
+                var waitInfo = new SwapchainImageWaitInfo
+                {
+                    Type = StructureType.SwapchainImageWaitInfo,
+                    Timeout = long.MaxValue,
+                };
+                var waitResult = _xr.WaitSwapchainImage(_colorSwapchains[eye], ref waitInfo);
+                if (waitResult != Result.Success)
+                {
+                    return waitResult;
+                }
+
+                var targetTexture = (ID3D11Texture2D*)_swapchainImages[eye][imageIndex].Texture;
+                var eyeHasFrame = UploadEyeTexture(
+                    targetTexture,
+                    eye,
+                    sourceFrameSnapshot,
+                    out var sequence,
+                    out var ageFromReceiveMs,
+                    out var ageFromDecodeMs,
+                    out var uploadFailureCode
+                );
+                if (eyeHasFrame && !hasRenderedVideoFrame)
+                {
+                    hasRenderedVideoFrame = true;
+                    renderedSequence = sequence;
+                    renderedAgeFromReceiveMs = ageFromReceiveMs;
+                    renderedAgeFromDecodeMs = ageFromDecodeMs;
+                }
+                else if (!eyeHasFrame && firstUploadFailureCode == 0 && uploadFailureCode != 0)
+                {
+                    firstUploadFailureCode = uploadFailureCode;
+                }
+
+                var releaseInfo = new SwapchainImageReleaseInfo
+                {
+                    Type = StructureType.SwapchainImageReleaseInfo,
+                };
+                var releaseResult = _xr.ReleaseSwapchainImage(
+                    _colorSwapchains[eye],
+                    ref releaseInfo
+                );
+                if (releaseResult != Result.Success)
+                {
+                    return releaseResult;
+                }
+
+                projectionViews[eye] = new CompositionLayerProjectionView
+                {
+                    Type = StructureType.CompositionLayerProjectionView,
+                    Pose = _views[eye].Pose,
+                    Fov = _views[eye].Fov,
+                    SubImage = new SwapchainSubImage
                     {
-                        Offset = new Offset2Di { X = 0, Y = 0 },
-                        Extent = new Extent2Di
+                        Swapchain = _colorSwapchains[eye],
+                        ImageRect = new Rect2Di
                         {
-                            Width = (int)_swapchainRenderWidths[eye],
-                            Height = (int)_swapchainRenderHeights[eye],
+                            Offset = new Offset2Di { X = 0, Y = 0 },
+                            Extent = new Extent2Di
+                            {
+                                Width = (int)_swapchainRenderWidths[eye],
+                                Height = (int)_swapchainRenderHeights[eye],
+                            },
                         },
+                        ImageArrayIndex = 0,
                     },
-                    ImageArrayIndex = 0,
-                },
-            };
+                };
+            }
+        }
+        finally
+        {
+            ReleaseVideoFrameSnapshot(sourceFrameSnapshot);
         }
 
         fixed (CompositionLayerProjectionView* projectionViewsPointer = projectionViews)
@@ -237,6 +249,7 @@ public sealed unsafe partial class OpenXrControllerInputService
     private bool UploadEyeTexture(
         ID3D11Texture2D* texture,
         int eye,
+        VideoFrameSnapshot sourceFrameSnapshot,
         out uint sequence,
         out long ageFromReceiveMs,
         out long ageFromDecodeMs,
@@ -253,23 +266,13 @@ public sealed unsafe partial class OpenXrControllerInputService
             return false;
         }
 
-        nint sourceTexturePointer;
-        uint sourceSubresourceIndex;
-        ulong sourceTimestampUnixMs;
-        ulong sourceDecodedUnixMs;
-        int sourceWidth;
-        int sourceVisibleHeight;
-        lock (_videoFrameLock)
-        {
-            sourceTexturePointer = _latestSbsSourceTexturePointer;
-            sourceSubresourceIndex = _latestSbsSourceSubresourceIndex;
-            sourceTimestampUnixMs = _latestSbsTimestampUnixMs;
-            sourceDecodedUnixMs = _latestSbsDecodedUnixMs;
-            sourceWidth = _latestSbsWidth;
-            sourceVisibleHeight =
-                _latestSbsVisibleHeight > 0 ? _latestSbsVisibleHeight : _latestSbsHeight;
-            sequence = _latestVideoSequence;
-        }
+        var sourceTexturePointer = sourceFrameSnapshot.SourceTexturePointer;
+        var sourceSubresourceIndex = sourceFrameSnapshot.SourceSubresourceIndex;
+        var sourceTimestampUnixMs = sourceFrameSnapshot.SourceTimestampUnixMs;
+        var sourceDecodedUnixMs = sourceFrameSnapshot.SourceDecodedUnixMs;
+        var sourceWidth = sourceFrameSnapshot.SourceWidth;
+        var sourceVisibleHeight = sourceFrameSnapshot.SourceVisibleHeight;
+        sequence = sourceFrameSnapshot.Sequence;
 
         if (sourceTexturePointer == IntPtr.Zero || sourceWidth <= 1 || sourceVisibleHeight <= 0)
         {
@@ -407,6 +410,35 @@ public sealed unsafe partial class OpenXrControllerInputService
         }
 
         return true;
+    }
+
+    private VideoFrameSnapshot AcquireLatestSbsFrameSnapshot()
+    {
+        lock (_videoFrameLock)
+        {
+            if (_latestSbsSourceTexturePointer != IntPtr.Zero)
+            {
+                Marshal.AddRef(_latestSbsSourceTexturePointer);
+            }
+
+            return new VideoFrameSnapshot(
+                _latestSbsSourceTexturePointer,
+                _latestSbsSourceSubresourceIndex,
+                _latestSbsTimestampUnixMs,
+                _latestSbsDecodedUnixMs,
+                _latestSbsWidth,
+                _latestSbsVisibleHeight > 0 ? _latestSbsVisibleHeight : _latestSbsHeight,
+                _latestVideoSequence
+            );
+        }
+    }
+
+    private static void ReleaseVideoFrameSnapshot(VideoFrameSnapshot snapshot)
+    {
+        if (snapshot.SourceTexturePointer != IntPtr.Zero)
+        {
+            Marshal.Release(snapshot.SourceTexturePointer);
+        }
     }
 
     private bool TryBlitEyeTextureWithVideoProcessor(

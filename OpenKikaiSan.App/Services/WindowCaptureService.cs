@@ -4,6 +4,7 @@ using System.Windows.Interop;
 using OpenKikaiSan.App.Models;
 using OpenKikaiSan.App.Utils;
 using Windows.Foundation;
+using Windows.Graphics;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
@@ -24,6 +25,7 @@ public sealed class WindowCaptureService : IDisposable
     private GraphicsCaptureSession? _captureSession;
     private nint _d3d11DevicePointer;
     private uint _sequence;
+    private SizeInt32 _currentContentSize;
     private string _statusText = "Capture: not selected";
     private bool _loggedFirstFrame;
 
@@ -163,6 +165,7 @@ public sealed class WindowCaptureService : IDisposable
             _captureItem = item;
             _captureItem.Closed += OnCaptureItemClosed;
             _sequence = 0;
+            _currentContentSize = item.Size;
             _loggedFirstFrame = false;
             _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
                 _captureDevice,
@@ -217,8 +220,8 @@ public sealed class WindowCaptureService : IDisposable
                 if (_captureItem is not null)
                 {
                     needsResize =
-                        contentSize.Width != _captureItem.Size.Width
-                        || contentSize.Height != _captureItem.Size.Height;
+                        contentSize.Width != _currentContentSize.Width
+                        || contentSize.Height != _currentContentSize.Height;
                     if (needsResize && _captureDevice is not null)
                     {
                         _framePool?.Recreate(
@@ -227,6 +230,7 @@ public sealed class WindowCaptureService : IDisposable
                             2,
                             contentSize
                         );
+                        _currentContentSize = contentSize;
                         _statusText =
                             $"Capture: {_captureItem.DisplayName} {contentSize.Width}x{contentSize.Height}";
                     }
@@ -316,6 +320,7 @@ public sealed class WindowCaptureService : IDisposable
         _captureSession = null;
         _framePool?.Dispose();
         _framePool = null;
+        _currentContentSize = default;
     }
 
     private static void InitializePickerWithWindow(GraphicsCapturePicker picker, nint ownerHwnd)
