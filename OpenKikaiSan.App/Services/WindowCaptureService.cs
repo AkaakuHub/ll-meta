@@ -3,12 +3,17 @@ using System.Windows;
 using System.Windows.Interop;
 using OpenKikaiSan.App.Models;
 using OpenKikaiSan.App.Utils;
+using Silk.NET.Direct3D11;
+using Silk.NET.DXGI;
 using Windows.Foundation;
 using Windows.Graphics;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
 using WinRT;
+using CaptureDirect3DDevice = Windows.Graphics.DirectX.Direct3D11.IDirect3DDevice;
+using CaptureDirect3DSurface = Windows.Graphics.DirectX.Direct3D11.IDirect3DSurface;
+using CapturePixelFormat = Windows.Graphics.DirectX.DirectXPixelFormat;
 
 namespace OpenKikaiSan.App.Services;
 
@@ -18,8 +23,10 @@ public sealed class WindowCaptureService : IDisposable
 
     private readonly object _lock = new();
     private readonly AppLogger _logger;
+    private nint _d3d11DevicePointerForCopy;
+    private nint _d3d11DeviceContextPointerForCopy;
 
-    private IDirect3DDevice? _captureDevice;
+    private CaptureDirect3DDevice? _captureDevice;
     private GraphicsCaptureItem? _captureItem;
     private Direct3D11CaptureFramePool? _framePool;
     private GraphicsCaptureSession? _captureSession;
@@ -71,6 +78,7 @@ public sealed class WindowCaptureService : IDisposable
             try
             {
                 _captureDevice = CreateCaptureDevice(d3d11DevicePointer);
+                SetDirect3D11Device(d3d11DevicePointer);
                 logMessage =
                     d3d11DevicePointer == IntPtr.Zero
                         ? "Window capture D3D11 device cleared because OpenXR device pointer is zero."
@@ -79,6 +87,7 @@ public sealed class WindowCaptureService : IDisposable
             catch (Exception ex)
             {
                 _captureDevice = null;
+                SetDirect3D11Device(IntPtr.Zero);
                 _statusText = "Capture: D3D11 device unavailable";
                 _logger.Error(
                     $"Window capture D3D11 device creation failed. pointer=0x{d3d11DevicePointer:X16}",
@@ -145,6 +154,7 @@ public sealed class WindowCaptureService : IDisposable
         lock (_lock)
         {
             _captureDevice = null;
+            SetDirect3D11Device(IntPtr.Zero);
         }
     }
 
@@ -169,7 +179,7 @@ public sealed class WindowCaptureService : IDisposable
             _loggedFirstFrame = false;
             _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
                 _captureDevice,
-                DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                CapturePixelFormat.B8G8R8A8UIntNormalized,
                 2,
                 item.Size
             );
@@ -226,7 +236,7 @@ public sealed class WindowCaptureService : IDisposable
                     {
                         _framePool?.Recreate(
                             _captureDevice,
-                            DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                            CapturePixelFormat.B8G8R8A8UIntNormalized,
                             2,
                             contentSize
                         );
@@ -237,13 +247,18 @@ public sealed class WindowCaptureService : IDisposable
                 }
             }
 
-            var texturePointer = GetTexturePointer(frame.Surface);
-            if (texturePointer == IntPtr.Zero)
+            var sourceTexturePointer = GetTexturePointer(frame.Surface);
+            if (sourceTexturePointer == IntPtr.Zero)
             {
                 return;
             }
 
-            Marshal.AddRef(texturePointer);
+            var stableTexturePointer = CreateStableTextureCopy(sourceTexturePointer);
+            Marshal.Release(sourceTexturePointer);
+            if (stableTexturePointer == IntPtr.Zero)
+            {
+                return;
+            }
 
             var sequence = unchecked(++_sequence);
             var nowUnixMs = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -253,7 +268,7 @@ public sealed class WindowCaptureService : IDisposable
                 nowUnixMs,
                 contentSize.Width,
                 contentSize.Height,
-                texturePointer,
+                stableTexturePointer,
                 0
             );
             if (!_loggedFirstFrame)
@@ -263,7 +278,14 @@ public sealed class WindowCaptureService : IDisposable
                     $"Window capture first frame: target={_captureItem?.DisplayName ?? "unknown"} size={contentSize.Width}x{contentSize.Height}"
                 );
             }
-            FrameCaptured?.Invoke(capturedFrame);
+            var frameCaptured = FrameCaptured;
+            if (frameCaptured is null)
+            {
+                Marshal.Release(stableTexturePointer);
+                return;
+            }
+
+            frameCaptured.Invoke(capturedFrame);
         }
         catch (Exception ex)
         {
@@ -275,7 +297,7 @@ public sealed class WindowCaptureService : IDisposable
         }
     }
 
-    private static IDirect3DDevice? CreateCaptureDevice(nint d3d11DevicePointer)
+    private static CaptureDirect3DDevice? CreateCaptureDevice(nint d3d11DevicePointer)
     {
         if (d3d11DevicePointer == IntPtr.Zero)
         {
@@ -290,7 +312,7 @@ public sealed class WindowCaptureService : IDisposable
 
         try
         {
-            return MarshalInterface<IDirect3DDevice>.FromAbi(inspectable);
+            return MarshalInterface<CaptureDirect3DDevice>.FromAbi(inspectable);
         }
         finally
         {
@@ -298,10 +320,96 @@ public sealed class WindowCaptureService : IDisposable
         }
     }
 
-    private static nint GetTexturePointer(IDirect3DSurface surface)
+    private static nint GetTexturePointer(CaptureDirect3DSurface surface)
     {
         var access = surface.As<IDirect3DDxgiInterfaceAccess>();
         return access.GetInterface(Id3D11Texture2DGuid);
+    }
+
+    private unsafe nint CreateStableTextureCopy(nint sourceTexturePointer)
+    {
+        lock (_lock)
+        {
+            if (
+                _d3d11DevicePointerForCopy == IntPtr.Zero
+                || _d3d11DeviceContextPointerForCopy == IntPtr.Zero
+            )
+            {
+                return IntPtr.Zero;
+            }
+        }
+
+        var d3d11Device = (ID3D11Device*)_d3d11DevicePointerForCopy;
+        var d3d11DeviceContext = (ID3D11DeviceContext*)_d3d11DeviceContextPointerForCopy;
+        var sourceTexture = (ID3D11Texture2D*)sourceTexturePointer;
+        Texture2DDesc textureDesc = default;
+        sourceTexture->GetDesc(&textureDesc);
+
+        textureDesc.Usage = Usage.Default;
+        textureDesc.CPUAccessFlags = 0;
+        textureDesc.MiscFlags = 0;
+
+        ID3D11Texture2D* copiedTexture = null;
+        lock (_lock)
+        {
+            if (
+                _d3d11DevicePointerForCopy == IntPtr.Zero
+                || _d3d11DeviceContextPointerForCopy == IntPtr.Zero
+            )
+            {
+                return IntPtr.Zero;
+            }
+
+            d3d11Device = (ID3D11Device*)_d3d11DevicePointerForCopy;
+            d3d11DeviceContext = (ID3D11DeviceContext*)_d3d11DeviceContextPointerForCopy;
+            var createResult = d3d11Device->CreateTexture2D(
+                ref textureDesc,
+                (SubresourceData*)0,
+                ref copiedTexture
+            );
+            if (createResult < 0 || copiedTexture is null)
+            {
+                _logger.Debug(
+                    $"Window capture texture copy allocation failed: hr=0x{createResult:X8} size={textureDesc.Width}x{textureDesc.Height} fmt={(int)textureDesc.Format}"
+                );
+                return IntPtr.Zero;
+            }
+
+            d3d11DeviceContext->CopyResource(
+                (ID3D11Resource*)copiedTexture,
+                (ID3D11Resource*)sourceTexture
+            );
+        }
+
+        return (nint)copiedTexture;
+    }
+
+    private unsafe void SetDirect3D11Device(nint devicePointer)
+    {
+        if (_d3d11DeviceContextPointerForCopy != IntPtr.Zero)
+        {
+            _ = ((ID3D11DeviceContext*)_d3d11DeviceContextPointerForCopy)->Release();
+            _d3d11DeviceContextPointerForCopy = IntPtr.Zero;
+        }
+
+        if (_d3d11DevicePointerForCopy != IntPtr.Zero)
+        {
+            _ = ((ID3D11Device*)_d3d11DevicePointerForCopy)->Release();
+            _d3d11DevicePointerForCopy = IntPtr.Zero;
+        }
+
+        if (devicePointer == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var device = (ID3D11Device*)devicePointer;
+        _ = device->AddRef();
+        _d3d11DevicePointerForCopy = devicePointer;
+
+        ID3D11DeviceContext* deviceContext = null;
+        device->GetImmediateContext(ref deviceContext);
+        _d3d11DeviceContextPointerForCopy = (nint)deviceContext;
     }
 
     private void DisposeCaptureObjects()
